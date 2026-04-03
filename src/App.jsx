@@ -90,6 +90,9 @@ function reducer(state, action) {
     case "DELETE_ACCOUNT": return { ...state, accounts: state.accounts.filter(a => a.id !== action.payload) };
     case "ADD_MODEL": return { ...state, customModels: [...(state.customModels || []), action.payload] };
     case "DELETE_MODEL": return { ...state, customModels: (state.customModels || []).filter(m => m !== action.payload) };
+    case "ADD_CONCEPT": return { ...state, customConcepts: [...(state.customConcepts || []), action.payload] };
+    case "DELETE_CONCEPT": return { ...state, customConcepts: (state.customConcepts || []).filter(c => c !== action.payload) };
+    case "IMPORT_DATA": return { ...action.payload };
     default: return state;
   }
 }
@@ -101,7 +104,18 @@ function loadState() {
   } catch (e) {
     console.error("Failed to load journal", e);
   }
-  return { trades: [], accounts: [], customModels: [] };
+  return { trades: [], accounts: [], customModels: [], customConcepts: [] };
+}
+
+// ── Responsive Hook ──
+function useIsMobile() {
+  const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const h = () => setW(window.innerWidth);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return { isMobile: w < 640, isTablet: w < 1024, width: w };
 }
 
 // ── UI Components ──
@@ -247,6 +261,7 @@ function AccountProgress({ account }) {
 
 // ── Monte Carlo ──
 function MonteCarloSim({ trades }) {
+  const { isMobile } = useIsMobile();
   const [simCount, setSimCount] = useState(1000);
   const [tradeCount, setTradeCount] = useState(100);
   const [startBal, setStartBal] = useState(50000);
@@ -317,7 +332,7 @@ function MonteCarloSim({ trades }) {
         <>
           <div style={{ ...sectionBox }}>
             <div style={{ ...lbl, marginBottom: 12 }}>Simulation Parameters</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10 }}>
               <Input label="Simulations" type="number" value={simCount} onChange={e => setSimCount(Math.max(100, +e.target.value))} />
               <Input label="Trades per Sim" type="number" value={tradeCount} onChange={e => setTradeCount(Math.max(10, +e.target.value))} />
               <Input label="Starting Balance ($)" type="number" value={startBal} onChange={e => setStartBal(+e.target.value)} />
@@ -338,7 +353,7 @@ function MonteCarloSim({ trades }) {
                 <StatCard label="Avg Max Drawdown" value={`$${results.avgMaxDd.toFixed(0)}`} accent="#fbbf24" />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
                 {/* Equity paths chart */}
                 <div style={{ ...sectionBox }}>
                   <div style={{ ...lbl, marginBottom: 10 }}>Sample Equity Curves ({results.sampleCurves.length} paths)</div>
@@ -405,10 +420,14 @@ function MonteCarloSim({ trades }) {
 }
 
 // ── Trade Form ──
-function TradeForm({ trade, accounts, customModels, onSave, onCancel, onAddModel }) {
+function TradeForm({ trade, accounts, customModels, customConcepts, onSave, onCancel, onAddModel, onAddConcept }) {
+  const { isMobile } = useIsMobile();
   const [form, setForm] = useState(trade || { ...DEFAULT_TRADE, date: new Date().toISOString().slice(0, 10) });
   const [newModel, setNewModel] = useState("");
+  const [newConcept, setNewConcept] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const allConcepts = [...ICT_CONCEPTS, ...(customConcepts || [])];
 
   // Migrate old single emotion to array
   useEffect(() => {
@@ -468,20 +487,20 @@ function TradeForm({ trade, accounts, customModels, onSave, onCancel, onAddModel
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10 }}>
         <Input label="Date" type="date" value={form.date} onChange={e => set("date", e.target.value)} />
         <Input label="Time" type="time" value={form.time} onChange={e => set("time", e.target.value)} />
         <Select label="Instrument" value={form.instrument} onChange={e => set("instrument", e.target.value)} options={INSTRUMENTS} />
         <Select label="Session" value={form.session} onChange={e => set("session", e.target.value)} options={SESSIONS} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr 1fr", gap: 10 }}>
         <Select label="Direction" value={form.direction} onChange={e => set("direction", e.target.value)} options={["Long", "Short"]} />
         <Input label="Contracts" type="number" value={form.contracts} onChange={e => set("contracts", +e.target.value)} />
         <Input label="Entry" type="number" step="any" value={form.entry} onChange={e => set("entry", e.target.value)} />
         <Input label="Stop Loss" type="number" step="any" value={form.stop} onChange={e => set("stop", e.target.value)} />
         <Input label="Target" type="number" step="any" value={form.target} onChange={e => set("target", e.target.value)} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10 }}>
         <Input label="Exit" type="number" step="any" value={form.exit} onChange={e => set("exit", e.target.value)} />
         <Input label="P&L $ (auto)" type="number" step="any" value={form.pnl} onChange={e => set("pnl", +e.target.value)} />
         <Input label="R:R (auto)" value={form.rr} onChange={e => set("rr", e.target.value)} />
@@ -492,7 +511,7 @@ function TradeForm({ trade, accounts, customModels, onSave, onCancel, onAddModel
         options={[{ value: "", label: "-- No Account --" }, ...accounts.map(a => ({ value: a.id, label: `${a.name} (${a.firm} - $${a.currentBalance.toLocaleString()})` }))]} />
 
       {sectionTitle("Bias & Model")}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 10 }}>
         <Select label="HTF Bias" value={form.htfBias} onChange={e => set("htfBias", e.target.value)} options={["", "Bullish", "Bearish", "Neutral/Ranging"]} />
         <Select label="LTF Entry TF" value={form.ltfEntry} onChange={e => set("ltfEntry", e.target.value)} options={["", ...TIMEFRAMES]} />
         <Input label="Draw on Liquidity" value={form.drawOnLiquidity} onChange={e => set("drawOnLiquidity", e.target.value)} placeholder="e.g. BSL above PDH" />
@@ -542,7 +561,15 @@ function TradeForm({ trade, accounts, customModels, onSave, onCancel, onAddModel
 
       {sectionTitle("ICT Concepts")}
       <div style={{ display: "flex", flexWrap: "wrap" }}>
-        {ICT_CONCEPTS.map(c => <Pill key={c} label={c} active={form.ictConcepts.includes(c)} onClick={() => toggle("ictConcepts", c)} color="rgba(168,85,247,0.18)" />)}
+        {allConcepts.map(c => <Pill key={c} label={c} active={form.ictConcepts.includes(c)} onClick={() => toggle("ictConcepts", c)} color="rgba(168,85,247,0.18)" />)}
+      </div>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input value={newConcept} onChange={e => setNewConcept(e.target.value)} placeholder="Add custom concept..."
+          onKeyDown={e => { if (e.key === "Enter" && newConcept.trim() && !allConcepts.includes(newConcept.trim())) { onAddConcept(newConcept.trim()); toggle("ictConcepts", newConcept.trim()); setNewConcept(""); } }}
+          style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 7, padding: "8px 11px", color: "#e2e8f0", fontSize: 12, fontFamily: "'DM Mono', monospace", outline: "none" }} />
+        {newConcept.trim() && !allConcepts.includes(newConcept.trim()) && (
+          <Btn variant="success" style={{ padding: "7px 12px", fontSize: 10 }} onClick={() => { onAddConcept(newConcept.trim()); toggle("ictConcepts", newConcept.trim()); setNewConcept(""); }}>+ Save</Btn>
+        )}
       </div>
 
       {/* Confluence Score */}
@@ -559,7 +586,7 @@ function TradeForm({ trade, accounts, customModels, onSave, onCancel, onAddModel
       </div>
 
       {sectionTitle("Trade Narrative")}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
         <TextArea label="Pre-Trade (Bias, DOL, Setup)" value={form.preTradeNarrative} onChange={e => set("preTradeNarrative", e.target.value)} placeholder="HTF bias? Where's the draw on liquidity? What PD array are you trading into?" />
         <TextArea label="Post-Trade Review" value={form.postTradeReview} onChange={e => set("postTradeReview", e.target.value)} placeholder="Did price respect your PD array? What would you do differently?" />
       </div>
@@ -575,11 +602,12 @@ function TradeForm({ trade, accounts, customModels, onSave, onCancel, onAddModel
 }
 
 function AccountForm({ account, onSave, onCancel }) {
+  const { isMobile } = useIsMobile();
   const [form, setForm] = useState(account || DEFAULT_ACCOUNT);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
         <Input label="Account Name" value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Apex 50K #1" />
         <Select label="Firm" value={form.firm} onChange={e => set("firm", e.target.value)} options={FIRMS} />
         <Select label="Phase" value={form.phase} onChange={e => set("phase", e.target.value)} options={PHASES} />
@@ -605,10 +633,42 @@ export default function TradingJournal() {
   const [editItem, setEditItem] = useState(null);
   const [filter, setFilter] = useState({ instrument: "", session: "" });
   const [selectedDay, setSelectedDay] = useState(null);
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const { isMobile, isTablet } = useIsMobile();
 
   useEffect(() => { localStorage.setItem("ict_journal_data", JSON.stringify(state)); }, [state]);
 
-  const { trades, accounts, customModels } = state;
+  const { trades, accounts, customModels, customConcepts } = state;
+
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `ict-journal-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const importData = () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".json";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (data.trades && data.accounts) {
+            if (confirm(`Import ${data.trades.length} trades and ${data.accounts.length} accounts? This will replace ALL current data.`)) {
+              dispatch({ type: "IMPORT_DATA", payload: { trades: data.trades || [], accounts: data.accounts || [], customModels: data.customModels || [], customConcepts: data.customConcepts || [] } });
+            }
+          } else { alert("Invalid file format."); }
+        } catch { alert("Could not parse file."); }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
 
   const filtered = trades.filter(t => {
     if (filter.instrument && t.instrument !== filter.instrument) return false;
@@ -648,29 +708,61 @@ export default function TradingJournal() {
   return (
     <div style={{ fontFamily: "'DM Mono', 'JetBrains Mono', monospace", background: "#0a0a0a", color: "#e2e8f0", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet" />
+      <style>{`
+        * { box-sizing: border-box; }
+        input, select, textarea, button { font-family: inherit; }
+        @media (max-width: 639px) {
+          .trade-table-row { font-size: 10px !important; }
+        }
+      `}</style>
 
       {/* Header */}
-      <div style={{ padding: "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.015)" }}>
+      <div style={{ padding: isMobile ? "12px 16px" : "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.015)", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #0ea5e9, #6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif" }}>J</div>
           <div>
-            <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "-0.02em" }}>ICT JOURNAL</div>
-            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Futures · Prop Firm Tracker</div>
+            <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: isMobile ? 14 : 16, letterSpacing: "-0.02em" }}>ICT JOURNAL</div>
+            {!isMobile && <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Futures · Prop Firm Tracker</div>}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 3 }}>
+        {isMobile ? (
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <button onClick={exportData} style={{ background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, color: "rgba(255,255,255,0.4)", padding: "5px 8px", cursor: "pointer", fontSize: 10 }}>↓</button>
+            <button onClick={importData} style={{ background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, color: "rgba(255,255,255,0.4)", padding: "5px 8px", cursor: "pointer", fontSize: 10 }}>↑</button>
+            <button onClick={() => setMobileMenu(!mobileMenu)} style={{ background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 6, color: "#e2e8f0", padding: "6px 10px", cursor: "pointer", fontSize: 16 }}>☰</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
+            {navItems.map(n => (
+              <button key={n.key} onClick={() => { setView(n.key); setSelectedDay(null); setMobileMenu(false); }} style={{
+                padding: "7px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", transition: "all 0.15s",
+                fontFamily: "'Space Grotesk', sans-serif",
+                background: isActive(n.key) ? "rgba(255,255,255,0.07)" : "transparent",
+                color: isActive(n.key) ? "#e2e8f0" : "rgba(255,255,255,0.3)"
+              }}>{n.label}</button>
+            ))}
+            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.06)", margin: "0 6px" }} />
+            <button onClick={exportData} style={{ background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, color: "rgba(255,255,255,0.4)", padding: "6px 12px", cursor: "pointer", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif" }}>Export</button>
+            <button onClick={importData} style={{ background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, color: "rgba(255,255,255,0.4)", padding: "6px 12px", cursor: "pointer", fontSize: 11, fontFamily: "'Space Grotesk', sans-serif" }}>Import</button>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Nav Dropdown */}
+      {isMobile && mobileMenu && (
+        <div style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "8px 16px", display: "flex", flexWrap: "wrap", gap: 4 }}>
           {navItems.map(n => (
-            <button key={n.key} onClick={() => { setView(n.key); setSelectedDay(null); }} style={{
-              padding: "7px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", transition: "all 0.15s",
-              fontFamily: "'Space Grotesk', sans-serif",
+            <button key={n.key} onClick={() => { setView(n.key); setSelectedDay(null); setMobileMenu(false); }} style={{
+              padding: "8px 16px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer",
+              fontFamily: "'Space Grotesk', sans-serif", flex: "1 1 auto", textAlign: "center",
               background: isActive(n.key) ? "rgba(255,255,255,0.07)" : "transparent",
               color: isActive(n.key) ? "#e2e8f0" : "rgba(255,255,255,0.3)"
             }}>{n.label}</button>
           ))}
         </div>
-      </div>
+      )}
 
-      <div style={{ padding: "20px 24px", flex: 1, overflowY: "auto" }}>
+      <div style={{ padding: isMobile ? "16px" : "20px 24px", flex: 1, overflowY: "auto" }}>
 
         {/* ══ DASHBOARD ══ */}
         {view === "dashboard" && (
@@ -696,14 +788,14 @@ export default function TradingJournal() {
               <StatCard label="Avg W / L" value={`$${avgWin}`} sub={`Avg Loss: $${avgLoss}`} accent="#fbbf24" />
               <StatCard label="Streak" value={streak > 0 ? `${streak}W` : streak < 0 ? `${Math.abs(streak)}L` : "--"} accent={streak > 0 ? "#4ade80" : streak < 0 ? "#f87171" : "#e2e8f0"} sub={`${trades.length} total`} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
               <PnlCalendar trades={trades} onDayClick={(d) => setSelectedDay(d === selectedDay ? null : d)} />
               <div style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 18 }}>
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 10 }}>Equity Curve</div>
                 {filtered.length > 0 ? <PnlChart trades={filtered} /> : <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades yet</div>}
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr", gap: 14 }}>
               {[
                 { title: "By Session", data: Object.entries(sessionStats), render: ([s, d]) => <div key={s} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12 }}><span>{s}</span><span style={{ color: d.pnl >= 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>${d.pnl.toFixed(0)} <span style={{ color: "rgba(255,255,255,0.25)" }}>({d.count})</span></span></div> },
                 { title: "Top ICT Concepts", data: Object.entries(conceptStats).sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 6), render: ([c, d]) => <div key={c} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12 }}><span style={{ color: "#c084fc" }}>{c}</span><span style={{ color: d.pnl >= 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>${d.pnl.toFixed(0)} <span style={{ color: "rgba(255,255,255,0.25)" }}>({d.count})</span></span></div> },
@@ -746,12 +838,12 @@ export default function TradingJournal() {
               <Pill label="All" active={!filter.instrument} onClick={() => setFilter(f => ({ ...f, instrument: "" }))} />
               {INSTRUMENTS.map(i => <Pill key={i} label={i} active={filter.instrument === i} onClick={() => setFilter(f => ({ ...f, instrument: i }))} />)}
             </div>
-            <div style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "85px 50px 60px 48px 42px 72px 72px 65px 45px 1fr 64px", padding: "8px 14px", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "85px 50px 60px 48px 42px 72px 72px 65px 45px 1fr 64px", minWidth: 700, padding: "8px 14px", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                 <span>Date</span><span>Instr</span><span>Session</span><span>Dir</span><span>Ctrs</span><span>Entry</span><span>Exit</span><span>P&L</span><span>R:R</span><span>Model / Err</span><span></span>
               </div>
               {filtered.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).map(t => (
-                <div key={t.id} style={{ display: "grid", gridTemplateColumns: "85px 50px 60px 48px 42px 72px 72px 65px 45px 1fr 64px", padding: "8px 14px", fontSize: 12, borderBottom: "1px solid rgba(255,255,255,0.03)", alignItems: "center" }}>
+                <div key={t.id} style={{ display: "grid", gridTemplateColumns: "85px 50px 60px 48px 42px 72px 72px 65px 45px 1fr 64px", minWidth: 700, padding: "8px 14px", fontSize: 12, borderBottom: "1px solid rgba(255,255,255,0.03)", alignItems: "center" }}>
                   <span style={{ fontSize: 11 }}>{t.date}</span>
                   <span style={{ fontWeight: 700, color: "#38bdf8" }}>{t.instrument}</span>
                   <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{t.session}</span>
@@ -785,9 +877,11 @@ export default function TradingJournal() {
                 trade={view === "editTrade" ? editItem : null}
                 accounts={accounts}
                 customModels={customModels || []}
+                customConcepts={customConcepts || []}
                 onSave={(form) => { dispatch({ type: view === "editTrade" ? "UPDATE_TRADE" : "ADD_TRADE", payload: form }); setView("trades"); }}
                 onCancel={() => setView("trades")}
                 onAddModel={(m) => dispatch({ type: "ADD_MODEL", payload: m })}
+                onAddConcept={(c) => dispatch({ type: "ADD_CONCEPT", payload: c })}
               />
             </div>
           </div>
@@ -845,7 +939,7 @@ export default function TradingJournal() {
       </div>
 
       <div style={{ padding: "10px 24px", borderTop: "1px solid rgba(255,255,255,0.03)", fontSize: 9, color: "rgba(255,255,255,0.15)", textAlign: "center", letterSpacing: "0.06em" }}>
-        ICT JOURNAL · FUTURES · PROP FIRM TRACKER · DATA STORED IN SESSION
+        ICT JOURNAL · FUTURES · PROP FIRM TRACKER
       </div>
     </div>
   );
