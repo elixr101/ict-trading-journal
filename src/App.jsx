@@ -77,7 +77,166 @@ function Sparkline({data}){
 // ─── CALENDAR ─────────────────────────────────────────────────────────────────
 function PnlCalendar({trades,onDayClick}){const[month,setMonth]=useState(()=>{const n=new Date();return{year:n.getFullYear(),month:n.getMonth()};});const dailyPnl=useMemo(()=>{const m={};trades.forEach(t=>{m[t.date]=(m[t.date]||0)+t.pnl;});return m;},[trades]);const dim=new Date(month.year,month.month+1,0).getDate();const fdow=new Date(month.year,month.month,1).getDay();const mn=new Date(month.year,month.month).toLocaleString("default",{month:"long",year:"numeric"});const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);return<div style={sbox}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><button onClick={()=>setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:"4px 8px"}}>‹</button><span style={{fontSize:13,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color:"#e2e8f0"}}>{mn}</span><button onClick={()=>setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:"4px 8px"}}>›</button></div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>{["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,color:"rgba(255,255,255,0.25)",fontWeight:700,padding:4}}>{d}</div>)}{cells.map((day,i)=>{if(!day)return<div key={`e${i}`}/>;const ds=`${month.year}-${String(month.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const pnl=dailyPnl[ds];const has=pnl!==undefined;const bg=!has?"transparent":pnl>0?"rgba(34,197,94,0.15)":pnl<0?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)";const col=!has?"rgba(255,255,255,0.25)":pnl>0?"#4ade80":pnl<0?"#f87171":"rgba(255,255,255,0.4)";return<div key={ds} onClick={()=>has&&onDayClick&&onDayClick(ds)} style={{textAlign:"center",borderRadius:6,padding:"6px 2px",background:bg,cursor:has?"pointer":"default"}}><div style={{fontSize:11,color:col,fontWeight:has?700:400}}>{day}</div>{has&&<div style={{fontSize:9,color:col,fontWeight:700,marginTop:1}}>${pnl>0?"+":""}{pnl.toFixed(0)}</div>}</div>;})}</div></div>;}
 
-// ─── PNL CHART ────────────────────────────────────────────────────────────────
+// ─── INTERACTIVE EQUITY CURVE ────────────────────────────────────────────────
+function EquityCurve({ trades }) {
+  const svgRef = useRef();
+  const containerRef = useRef();
+  const [tooltip, setTooltip] = useState(null);
+  const [zoom, setZoom] = useState({ scale: 1, offsetX: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState(null);
+  const [dims, setDims] = useState({ w: 400, h: 180 });
+
+  useEffect(() => {
+    const obs = new ResizeObserver(entries => {
+      const e = entries[0];
+      if (e) setDims({ w: e.contentRect.width || 400, h: 180 });
+    });
+    if (containerRef.current) obs.observe(containerRef.current);
+    return () => obs.disconnect();
+  }, []);
+
+  const PAD = { top: 12, right: 16, bottom: 32, left: 56 };
+  const W = dims.w - PAD.left - PAD.right;
+  const H = dims.h - PAD.top - PAD.bottom;
+
+  const sorted = useMemo(() => [...trades].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)), [trades]);
+
+  const { cumPnl, labels } = useMemo(() => {
+    const cumPnl = [0]; const labels = ["Start"];
+    let r = 0;
+    sorted.forEach(t => { r += t.pnl; cumPnl.push(parseFloat(r.toFixed(2))); labels.push(t.date); });
+    return { cumPnl, labels };
+  }, [sorted]);
+
+  if (cumPnl.length < 2) return <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades</div>;
+
+  const maxVal = Math.max(...cumPnl, 0);
+  const minVal = Math.min(...cumPnl, 0);
+  const valRange = maxVal - minVal || 1;
+
+  // Zoom-clamped visible range
+  const totalPts = cumPnl.length;
+  const visibleCount = Math.max(2, Math.floor(totalPts / zoom.scale));
+  const maxOffset = totalPts - visibleCount;
+  const startIdx = Math.max(0, Math.min(maxOffset, Math.round(zoom.offsetX)));
+  const endIdx = Math.min(totalPts - 1, startIdx + visibleCount);
+  const visPts = cumPnl.slice(startIdx, endIdx + 1);
+  const visLabels = labels.slice(startIdx, endIdx + 1);
+
+  const visMax = Math.max(...visPts, 0);
+  const visMin = Math.min(...visPts, 0);
+  const visRange = visMax - visMin || 1;
+
+  const toX = i => (i / (visPts.length - 1)) * W;
+  const toY = v => H - ((v - visMin) / visRange) * H;
+  const zeroY = toY(0);
+
+  const points = visPts.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+  const color = visPts[visPts.length - 1] >= 0 ? "#4ade80" : "#f87171";
+
+  // Y axis ticks
+  const yTicks = [];
+  const tickCount = 5;
+  for (let i = 0; i <= tickCount; i++) {
+    const val = visMin + (visRange / tickCount) * i;
+    yTicks.push({ y: toY(val), label: `$${val >= 0 ? "+" : ""}${val.toFixed(0)}` });
+  }
+
+  // X axis ticks — show ~4 labels
+  const xTicks = [];
+  const xStep = Math.max(1, Math.floor((visPts.length - 1) / 4));
+  for (let i = 0; i < visPts.length; i += xStep) {
+    xTicks.push({ x: toX(i), label: visLabels[i] === "Start" ? "Start" : visLabels[i]?.slice(5) || "" });
+  }
+
+  const handleMouseMove = (e) => {
+    if (dragging && dragStart) {
+      const dx = e.clientX - dragStart.x;
+      const pxPerPt = W / Math.max(1, visPts.length - 1);
+      const ptDelta = -dx / pxPerPt;
+      const newOffset = Math.max(0, Math.min(maxOffset, dragStart.offset + ptDelta));
+      setZoom(z => ({ ...z, offsetX: newOffset }));
+      return;
+    }
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mx = e.clientX - rect.left - PAD.left;
+    const idx = Math.round((mx / W) * (visPts.length - 1));
+    if (idx >= 0 && idx < visPts.length) {
+      setTooltip({ x: toX(idx) + PAD.left, y: toY(visPts[idx]) + PAD.top, val: visPts[idx], label: visLabels[idx], idx: startIdx + idx });
+    }
+  };
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.85 : 1.18;
+    setZoom(z => {
+      const newScale = Math.max(1, Math.min(totalPts / 2, z.scale * delta));
+      return { ...z, scale: newScale };
+    });
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", userSelect: "none" }}
+      onMouseLeave={() => { setTooltip(null); setDragging(false); }}
+      onMouseUp={() => setDragging(false)}
+    >
+      {tooltip && (
+        <div style={{ position: "absolute", left: Math.min(tooltip.x, dims.w - 130), top: Math.max(0, tooltip.y - 48), background: "rgba(15,15,20,0.95)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 7, padding: "6px 10px", fontSize: 11, pointerEvents: "none", zIndex: 10, whiteSpace: "nowrap" }}>
+          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, marginBottom: 2 }}>{tooltip.label} · Trade #{tooltip.idx}</div>
+          <div style={{ color: tooltip.val >= 0 ? "#4ade80" : "#f87171", fontWeight: 800, fontFamily: "'DM Mono',monospace", fontSize: 13 }}>{tooltip.val >= 0 ? "+" : ""}${tooltip.val.toFixed(2)}</div>
+        </div>
+      )}
+      <svg ref={svgRef} width="100%" height={dims.h} viewBox={`0 0 ${dims.w} ${dims.h}`}
+        style={{ cursor: dragging ? "grabbing" : "crosshair", display: "block" }}
+        onMouseMove={handleMouseMove}
+        onMouseDown={e => { setDragging(true); setDragStart({ x: e.clientX, offset: zoom.offsetX }); }}
+        onWheel={handleWheel}
+      >
+        <g transform={`translate(${PAD.left},${PAD.top})`}>
+          {/* Grid lines */}
+          {yTicks.map((t, i) => <line key={i} x1={0} y1={t.y} x2={W} y2={t.y} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />)}
+          {/* Zero line */}
+          <line x1={0} y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="4,4" />
+          {/* Area fill */}
+          <defs>
+            <linearGradient id="ecGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+              <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+            </linearGradient>
+            <clipPath id="ecClip"><rect x="0" y="0" width={W} height={H} /></clipPath>
+          </defs>
+          <polygon fill="url(#ecGrad)" clipPath="url(#ecClip)" points={`0,${zeroY} ${points} ${W},${zeroY}`} />
+          {/* Line */}
+          <polyline fill="none" stroke={color} strokeWidth="2" points={points} strokeLinecap="round" strokeLinejoin="round" clipPath="url(#ecClip)" />
+          {/* Hover dot */}
+          {tooltip && (() => {
+            const localIdx = tooltip.idx - startIdx;
+            if (localIdx < 0 || localIdx >= visPts.length) return null;
+            return <circle cx={toX(localIdx)} cy={toY(visPts[localIdx])} r={4} fill={color} stroke="#0a0a0a" strokeWidth={2} />;
+          })()}
+          {/* Y axis labels */}
+          {yTicks.map((t, i) => <text key={i} x={-6} y={t.y + 4} textAnchor="end" fontSize={9} fill="rgba(255,255,255,0.3)" fontFamily="'DM Mono',monospace">{t.label}</text>)}
+          {/* X axis labels */}
+          {xTicks.map((t, i) => <text key={i} x={t.x} y={H + 20} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.3)" fontFamily="'DM Mono',monospace">{t.label}</text>)}
+          {/* Y axis line */}
+          <line x1={0} y1={0} x2={0} y2={H} stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+          {/* X axis line */}
+          <line x1={0} y1={H} x2={W} y2={H} stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+        </g>
+      </svg>
+      {zoom.scale > 1.05 && (
+        <div style={{ position: "absolute", bottom: 36, right: 8, fontSize: 9, color: "rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.4)", borderRadius: 4, padding: "2px 6px" }}>scroll to zoom · drag to pan</div>
+      )}
+      {zoom.scale <= 1.05 && (
+        <div style={{ position: "absolute", bottom: 36, right: 8, fontSize: 9, color: "rgba(255,255,255,0.2)" }}>scroll to zoom</div>
+      )}
+    </div>
+  );
+}
+
+// ─── PNL CHART (legacy - kept for compatibility) ──────────────────────────────
 function PnlChart({trades}){if(!trades.length)return null;const sorted=[...trades].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));const cum=[];let r=0;sorted.forEach(t=>{r+=t.pnl;cum.push(r);});const max=Math.max(...cum,0),min=Math.min(...cum,0),range=max-min||1,h=120,w=100;const pts=cum.map((v,i)=>`${(i/Math.max(cum.length-1,1))*w},${h-((v-min)/range)*h}`).join(" ");const zy=h-((0-min)/range)*h;return<svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:120}} preserveAspectRatio="none"><line x1="0" y1={zy} x2={w} y2={zy} stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"/><polyline fill="none" stroke={r>=0?"#4ade80":"#f87171"} strokeWidth="1.5" points={pts} strokeLinecap="round" strokeLinejoin="round"/></svg>;}
 
 // ─── ACCOUNT PROGRESS ─────────────────────────────────────────────────────────
@@ -108,7 +267,8 @@ function generateSPCurve(nPoints, totalReturnPct) {
 function SPComparison({ trades }) {
   const { isMobile } = useIsMobile();
   const [period, setPeriod] = useState("1Y");
-  const [startBal, setStartBal] = useState(50000);
+  const [startBalStr, setStartBalStr] = useState("50000");
+  const startBal = parseFloat(startBalStr) || 50000;
 
   const periodConfig = {
     "1M":  { days: 30,   spReturn: 0.82,  label: "1 Month",   pts: 22  },
@@ -204,7 +364,7 @@ function SPComparison({ trades }) {
 
       <div style={{ marginBottom: 8 }}>
         <label style={{ ...ulbl, display: "block", marginBottom: 4 }}>Reference Balance ($)</label>
-        <input type="number" value={startBal} onChange={e => setStartBal(+e.target.value || 50000)} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "6px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "'DM Mono',monospace", outline: "none", width: 140 }} />
+        <input type="text" inputMode="numeric" value={startBalStr} onChange={e => { const v = e.target.value.replace(/[^0-9]/g,""); setStartBalStr(v); }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "6px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "'DM Mono',monospace", outline: "none", width: 140 }} />
       </div>
 
       <div style={{ position: "relative" }}>
@@ -354,13 +514,13 @@ function MonteCarloSim({ trades }) {
 }
 
 // ─── TRADE FORM ───────────────────────────────────────────────────────────────
-function TradeForm({trade,accounts,customModels,customConcepts,onSave,onCancel,onAddModel,onAddConcept}){const{isMobile}=useIsMobile();const[form,setForm]=useState(trade||{id:"",date:new Date().toISOString().slice(0,10),time:"",instrument:"NQ",session:"NY AM",direction:"Long",contracts:1,entry:"",stop:"",target:"",exit:"",pnl:0,ictConcepts:[],emotions:["Calm"],grade:"B",accountId:"",notes:"",rr:"",partials:"",preTradeNarrative:"",postTradeReview:"",htfBias:"",ltfEntry:"",confluenceScore:0,mistakes:[],rulesFollowed:[],drawOnLiquidity:"",entryModel:"",chartUrl:""});const[nc,setNC]=useState("");const set=(k,v)=>setForm(f=>({...f,[k]:v}));const allC=[...ICT_CONCEPTS,...(customConcepts||[])];const allM=[...DEFAULT_MODELS,...(customModels||[])];useEffect(()=>{if(form.emotion&&!form.emotions)setForm(f=>({...f,emotions:[f.emotion]}));},[]);useEffect(()=>{const rr=calcRR(form.entry,form.stop,form.exit,form.direction);const pnl=calcPnl(form.entry,form.exit,form.contracts,form.instrument,form.direction);setForm(f=>({...f,rr:rr||f.rr,pnl:form.exit?pnl:f.pnl}));},[form.entry,form.stop,form.exit,form.contracts,form.instrument,form.direction]);const ems=form.emotions||[];useEffect(()=>{const rP=RULE_CHECKLIST.length>0?(form.rulesFollowed.length/RULE_CHECKLIST.length)*3.0:0;const iP=form.ictConcepts.length===0?0:Math.min(2.0,0.7*Math.sqrt(form.ictConcepts.length));let nP=0;if(form.htfBias)nP+=0.4;if(form.ltfEntry)nP+=0.3;if((form.drawOnLiquidity||"").length>3)nP+=0.3;if((form.entryModel||"").length>3)nP+=0.3;if((form.preTradeNarrative||"").length>20)nP+=0.4;const es=form.emotions||[];const pC=es.filter(e=>!NEGATIVE_EMOTIONS.includes(e)).length;const nC=es.filter(e=>NEGATIVE_EMOTIONS.includes(e)).length;const eB=Math.min(1.5,pC*0.5);const eP=nC*0.8;const mP=(pC>0&&nC>0)?0.3:0;const gM={"A+":1.5,"A":1.2,"B":0.8,"C":0.4,"D":0.1,"F":0};const sub=rP+iP+nP+eB+(gM[form.grade]||0);set("confluenceScore",Math.max(0,Math.min(10,Math.round((sub-form.mistakes.length*1.5-eP-mP)*10)/10)));},[form.ictConcepts,form.rulesFollowed,form.mistakes,form.htfBias,form.ltfEntry,form.drawOnLiquidity,form.entryModel,form.preTradeNarrative,form.emotions,form.grade]);const toggle=(k,v)=>setForm(f=>({...f,[k]:f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]}));const toggleEmo=e=>setForm(f=>{const c=f.emotions||[];return{...f,emotions:c.includes(e)?c.filter(x=>x!==e):[...c,e]};});const sec=t=><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:700,marginTop:8,marginBottom:4,borderTop:"1px solid rgba(255,255,255,0.05)",paddingTop:14}}>{t}</div>;const g=isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr";return<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Date" type="date" value={form.date} onChange={e=>set("date",e.target.value)}/><Input label="Time" type="time" value={form.time} onChange={e=>set("time",e.target.value)}/><Select label="Instrument" value={form.instrument} onChange={e=>set("instrument",e.target.value)} options={INSTRUMENTS}/><Select label="Session" value={form.session} onChange={e=>set("session",e.target.value)} options={SESSIONS}/></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr 1fr",gap:10}}><Select label="Direction" value={form.direction} onChange={e=>set("direction",e.target.value)} options={["Long","Short"]}/><Input label="Contracts" type="number" value={form.contracts} onChange={e=>set("contracts",+e.target.value)}/><Input label="Entry" type="number" step="any" value={form.entry} onChange={e=>set("entry",e.target.value)}/><Input label="Stop" type="number" step="any" value={form.stop} onChange={e=>set("stop",e.target.value)}/><Input label="Target" type="number" step="any" value={form.target} onChange={e=>set("target",e.target.value)}/></div><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Exit" type="number" step="any" value={form.exit} onChange={e=>set("exit",e.target.value)}/><Input label="P&L (auto)" type="number" step="any" value={form.pnl} onChange={e=>set("pnl",+e.target.value)}/><Input label="R:R (auto)" value={form.rr} onChange={e=>set("rr",e.target.value)}/><Select label="Grade" value={form.grade} onChange={e=>set("grade",e.target.value)} options={TRADE_GRADES}/></div><Select label="Account" value={form.accountId} onChange={e=>set("accountId",e.target.value)} options={[{value:"",label:"-- No Account --"},...accounts.map(a=>({value:a.id,label:`${a.name} (${a.firm} $${a.currentBalance.toLocaleString()})`}))]}/><Input label="Chart URL" value={form.chartUrl||""} onChange={e=>set("chartUrl",e.target.value)} placeholder="https://tradingview.com/x/..."/>{sec("Bias & Model")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}><Select label="HTF Bias" value={form.htfBias} onChange={e=>set("htfBias",e.target.value)} options={["","Bullish","Bearish","Neutral/Ranging"]}/><Select label="LTF TF" value={form.ltfEntry} onChange={e=>set("ltfEntry",e.target.value)} options={["",...TIMEFRAMES]}/><Input label="Draw on Liquidity" value={form.drawOnLiquidity} onChange={e=>set("drawOnLiquidity",e.target.value)} placeholder="BSL above PDH"/></div><div><label style={{...ulbl,display:"block",marginBottom:6}}>Entry Model</label><div style={{display:"flex",flexWrap:"wrap",marginBottom:6}}>{allM.map(m=><Pill key={m} label={m} active={form.entryModel===m} onClick={()=>set("entryModel",m)} color="rgba(56,189,248,0.18)"/>)}</div><div style={{display:"flex",gap:6}}><input value={form.entryModel} onChange={e=>set("entryModel",e.target.value)} placeholder="Or type custom..." style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{form.entryModel&&!allM.includes(form.entryModel)&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>onAddModel(form.entryModel.trim())}>+ Save</Btn>}</div></div>{sec("Pre-Trade Rules")}<div style={{display:"flex",flexWrap:"wrap",gap:3}}>{RULE_CHECKLIST.map(r=><Pill key={r} label={r} active={form.rulesFollowed.includes(r)} onClick={()=>toggle("rulesFollowed",r)} color="rgba(34,197,94,0.18)"/>)}</div>{sec("Psychology")}<div><label style={{...ulbl,display:"block",marginBottom:4}}>Emotions <span style={{fontWeight:400,textTransform:"none",color:"rgba(255,255,255,0.2)"}}>(multi)</span></label><div style={{display:"flex",flexWrap:"wrap"}}>{EMOTIONS.map(e=><Pill key={e} label={e} active={ems.includes(e)} onClick={()=>toggleEmo(e)} color={NEGATIVE_EMOTIONS.includes(e)?"rgba(239,68,68,0.18)":"rgba(34,197,94,0.18)"}/>)}</div></div><div><label style={{...ulbl,display:"block",marginBottom:6}}>Mistakes</label><div style={{display:"flex",flexWrap:"wrap"}}>{MISTAKES.map(m=><Pill key={m} label={m} active={form.mistakes.includes(m)} onClick={()=>toggle("mistakes",m)} color="rgba(239,68,68,0.18)"/>)}</div></div>{sec("ICT Concepts")}<div style={{display:"flex",flexWrap:"wrap"}}>{allC.map(c=><Pill key={c} label={c} active={form.ictConcepts.includes(c)} onClick={()=>toggle("ictConcepts",c)} color="rgba(168,85,247,0.18)"/>)}</div><div style={{display:"flex",gap:6}}><input value={nc} onChange={e=>setNC(e.target.value)} placeholder="Add custom concept..." onKeyDown={e=>{if(e.key==="Enter"&&nc.trim()&&!allC.includes(nc.trim())){onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{nc.trim()&&!allC.includes(nc.trim())&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>{onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}>+ Save</Btn>}</div><div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"rgba(255,255,255,0.025)",borderRadius:8,border:"1px solid rgba(255,255,255,0.05)"}}><span style={ulbl}>Confluence</span><div style={{display:"flex",gap:3}}>{Array.from({length:10}).map((_,i)=>{const fill=Math.min(1,Math.max(0,form.confluenceScore-i));const bc=form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":"#f87171";return<div key={i} style={{width:18,height:8,borderRadius:2,background:fill>=1?bc:fill>0?`linear-gradient(90deg,${bc} ${fill*100}%,rgba(255,255,255,0.06) ${fill*100}%)`:"rgba(255,255,255,0.06)"}}/>;})}</div><span style={{fontSize:14,fontWeight:800,fontFamily:"'DM Mono',monospace",color:form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":form.confluenceScore>0?"#f87171":"#e2e8f0"}}>{form.confluenceScore}/10</span></div>{sec("Narrative")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}><TextArea label="Pre-Trade" value={form.preTradeNarrative} onChange={e=>set("preTradeNarrative",e.target.value)} placeholder="HTF bias? DOL?"/><TextArea label="Post-Trade" value={form.postTradeReview} onChange={e=>set("postTradeReview",e.target.value)} placeholder="What happened?"/></div><TextArea label="Partials" value={form.partials} onChange={e=>set("partials",e.target.value)} placeholder="TP1 at 1:1..."/><TextArea label="Notes" value={form.notes} onChange={e=>set("notes",e.target.value)}/><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn variant="ghost" onClick={onCancel}>Cancel</Btn><Btn variant="primary" onClick={()=>onSave(form)}>Save Trade</Btn></div></div>;}
+function TradeForm({trade,accounts,customModels,customConcepts,onSave,onCancel,onAddModel,onAddConcept,defaultSession,defaultInstrument}){const{isMobile}=useIsMobile();const[form,setForm]=useState(trade||{id:"",date:new Date().toISOString().slice(0,10),time:"",instrument:defaultInstrument||"NQ",session:defaultSession||"NY AM",direction:"Long",contracts:1,entry:"",stop:"",target:"",exit:"",pnl:0,ictConcepts:[],emotions:["Calm"],grade:"B",accountId:"",notes:"",rr:"",partials:"",preTradeNarrative:"",postTradeReview:"",htfBias:"",ltfEntry:"",confluenceScore:0,mistakes:[],rulesFollowed:[],drawOnLiquidity:"",entryModel:"",chartUrl:""});const[nc,setNC]=useState("");const set=(k,v)=>setForm(f=>({...f,[k]:v}));const allC=[...ICT_CONCEPTS,...(customConcepts||[])];const allM=[...DEFAULT_MODELS,...(customModels||[])];useEffect(()=>{if(form.emotion&&!form.emotions)setForm(f=>({...f,emotions:[f.emotion]}));},[]);useEffect(()=>{const rr=calcRR(form.entry,form.stop,form.exit,form.direction);const pnl=calcPnl(form.entry,form.exit,form.contracts,form.instrument,form.direction);setForm(f=>({...f,rr:rr||f.rr,pnl:form.exit?pnl:f.pnl}));},[form.entry,form.stop,form.exit,form.contracts,form.instrument,form.direction]);const ems=form.emotions||[];useEffect(()=>{const rP=RULE_CHECKLIST.length>0?(form.rulesFollowed.length/RULE_CHECKLIST.length)*3.0:0;const iP=form.ictConcepts.length===0?0:Math.min(2.0,0.7*Math.sqrt(form.ictConcepts.length));let nP=0;if(form.htfBias)nP+=0.4;if(form.ltfEntry)nP+=0.3;if((form.drawOnLiquidity||"").length>3)nP+=0.3;if((form.entryModel||"").length>3)nP+=0.3;if((form.preTradeNarrative||"").length>20)nP+=0.4;const es=form.emotions||[];const pC=es.filter(e=>!NEGATIVE_EMOTIONS.includes(e)).length;const nC=es.filter(e=>NEGATIVE_EMOTIONS.includes(e)).length;const eB=Math.min(1.5,pC*0.5);const eP=nC*0.8;const mP=(pC>0&&nC>0)?0.3:0;const gM={"A+":1.5,"A":1.2,"B":0.8,"C":0.4,"D":0.1,"F":0};const sub=rP+iP+nP+eB+(gM[form.grade]||0);set("confluenceScore",Math.max(0,Math.min(10,Math.round((sub-form.mistakes.length*1.5-eP-mP)*10)/10)));},[form.ictConcepts,form.rulesFollowed,form.mistakes,form.htfBias,form.ltfEntry,form.drawOnLiquidity,form.entryModel,form.preTradeNarrative,form.emotions,form.grade]);const toggle=(k,v)=>setForm(f=>({...f,[k]:f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]}));const toggleEmo=e=>setForm(f=>{const c=f.emotions||[];return{...f,emotions:c.includes(e)?c.filter(x=>x!==e):[...c,e]};});const sec=t=><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:700,marginTop:8,marginBottom:4,borderTop:"1px solid rgba(255,255,255,0.05)",paddingTop:14}}>{t}</div>;const g=isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr";return<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Date" type="date" value={form.date} onChange={e=>set("date",e.target.value)}/><Input label="Time" type="time" value={form.time} onChange={e=>set("time",e.target.value)}/><Select label="Instrument" value={form.instrument} onChange={e=>set("instrument",e.target.value)} options={INSTRUMENTS}/><Select label="Session" value={form.session} onChange={e=>set("session",e.target.value)} options={SESSIONS}/></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr 1fr",gap:10}}><Select label="Direction" value={form.direction} onChange={e=>set("direction",e.target.value)} options={["Long","Short"]}/><Input label="Contracts" type="number" value={form.contracts} onChange={e=>set("contracts",+e.target.value)}/><Input label="Entry" type="number" step="any" value={form.entry} onChange={e=>set("entry",e.target.value)}/><Input label="Stop" type="number" step="any" value={form.stop} onChange={e=>set("stop",e.target.value)}/><Input label="Target" type="number" step="any" value={form.target} onChange={e=>set("target",e.target.value)}/></div><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Exit" type="number" step="any" value={form.exit} onChange={e=>set("exit",e.target.value)}/><Input label="P&L (auto)" type="number" step="any" value={form.pnl} onChange={e=>set("pnl",+e.target.value)}/><Input label="R:R (auto)" value={form.rr} onChange={e=>set("rr",e.target.value)}/><Select label="Grade" value={form.grade} onChange={e=>set("grade",e.target.value)} options={TRADE_GRADES}/></div><Select label="Account" value={form.accountId} onChange={e=>set("accountId",e.target.value)} options={[{value:"",label:"-- No Account --"},...accounts.map(a=>({value:a.id,label:`${a.name} (${a.firm} $${a.currentBalance.toLocaleString()})`}))]}/><Input label="Chart URL" value={form.chartUrl||""} onChange={e=>set("chartUrl",e.target.value)} placeholder="https://tradingview.com/x/..."/>{sec("Bias & Model")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}><Select label="HTF Bias" value={form.htfBias} onChange={e=>set("htfBias",e.target.value)} options={["","Bullish","Bearish","Neutral/Ranging"]}/><Select label="LTF TF" value={form.ltfEntry} onChange={e=>set("ltfEntry",e.target.value)} options={["",...TIMEFRAMES]}/><Input label="Draw on Liquidity" value={form.drawOnLiquidity} onChange={e=>set("drawOnLiquidity",e.target.value)} placeholder="BSL above PDH"/></div><div><label style={{...ulbl,display:"block",marginBottom:6}}>Entry Model</label><div style={{display:"flex",flexWrap:"wrap",marginBottom:6}}>{allM.map(m=><Pill key={m} label={m} active={form.entryModel===m} onClick={()=>set("entryModel",m)} color="rgba(56,189,248,0.18)"/>)}</div><div style={{display:"flex",gap:6}}><input value={form.entryModel} onChange={e=>set("entryModel",e.target.value)} placeholder="Or type custom..." style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{form.entryModel&&!allM.includes(form.entryModel)&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>onAddModel(form.entryModel.trim())}>+ Save</Btn>}</div></div>{sec("Pre-Trade Rules")}<div style={{display:"flex",flexWrap:"wrap",gap:3}}>{RULE_CHECKLIST.map(r=><Pill key={r} label={r} active={form.rulesFollowed.includes(r)} onClick={()=>toggle("rulesFollowed",r)} color="rgba(34,197,94,0.18)"/>)}</div>{sec("Psychology")}<div><label style={{...ulbl,display:"block",marginBottom:4}}>Emotions <span style={{fontWeight:400,textTransform:"none",color:"rgba(255,255,255,0.2)"}}>(multi)</span></label><div style={{display:"flex",flexWrap:"wrap"}}>{EMOTIONS.map(e=><Pill key={e} label={e} active={ems.includes(e)} onClick={()=>toggleEmo(e)} color={NEGATIVE_EMOTIONS.includes(e)?"rgba(239,68,68,0.18)":"rgba(34,197,94,0.18)"}/>)}</div></div><div><label style={{...ulbl,display:"block",marginBottom:6}}>Mistakes</label><div style={{display:"flex",flexWrap:"wrap"}}>{MISTAKES.map(m=><Pill key={m} label={m} active={form.mistakes.includes(m)} onClick={()=>toggle("mistakes",m)} color="rgba(239,68,68,0.18)"/>)}</div></div>{sec("ICT Concepts")}<div style={{display:"flex",flexWrap:"wrap"}}>{allC.map(c=><Pill key={c} label={c} active={form.ictConcepts.includes(c)} onClick={()=>toggle("ictConcepts",c)} color="rgba(168,85,247,0.18)"/>)}</div><div style={{display:"flex",gap:6}}><input value={nc} onChange={e=>setNC(e.target.value)} placeholder="Add custom concept..." onKeyDown={e=>{if(e.key==="Enter"&&nc.trim()&&!allC.includes(nc.trim())){onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{nc.trim()&&!allC.includes(nc.trim())&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>{onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}>+ Save</Btn>}</div><div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"rgba(255,255,255,0.025)",borderRadius:8,border:"1px solid rgba(255,255,255,0.05)"}}><span style={ulbl}>Confluence</span><div style={{display:"flex",gap:3}}>{Array.from({length:10}).map((_,i)=>{const fill=Math.min(1,Math.max(0,form.confluenceScore-i));const bc=form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":"#f87171";return<div key={i} style={{width:18,height:8,borderRadius:2,background:fill>=1?bc:fill>0?`linear-gradient(90deg,${bc} ${fill*100}%,rgba(255,255,255,0.06) ${fill*100}%)`:"rgba(255,255,255,0.06)"}}/>;})}</div><span style={{fontSize:14,fontWeight:800,fontFamily:"'DM Mono',monospace",color:form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":form.confluenceScore>0?"#f87171":"#e2e8f0"}}>{form.confluenceScore}/10</span></div>{sec("Narrative")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}><TextArea label="Pre-Trade" value={form.preTradeNarrative} onChange={e=>set("preTradeNarrative",e.target.value)} placeholder="HTF bias? DOL?"/><TextArea label="Post-Trade" value={form.postTradeReview} onChange={e=>set("postTradeReview",e.target.value)} placeholder="What happened?"/></div><TextArea label="Partials" value={form.partials} onChange={e=>set("partials",e.target.value)} placeholder="TP1 at 1:1..."/><TextArea label="Notes" value={form.notes} onChange={e=>set("notes",e.target.value)}/><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn variant="ghost" onClick={onCancel}>Cancel</Btn><Btn variant="primary" onClick={()=>onSave(form)}>Save Trade</Btn></div></div>;}
 
 // ─── ACCOUNT FORM ─────────────────────────────────────────────────────────────
 function AccountForm({account,onSave,onCancel}){const{isMobile}=useIsMobile();const[form,setForm]=useState(account||{id:"",name:"",firm:"",size:0,maxLoss:0,dailyLoss:0,profitTarget:0,currentBalance:0,phase:"Evaluation",status:"Active",balanceHistory:[]});const set=(k,v)=>setForm(f=>({...f,[k]:v}));return<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}><Input label="Account Name" value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. Apex 50K #1"/><Select label="Firm" value={form.firm} onChange={e=>set("firm",e.target.value)} options={FIRMS}/><Select label="Phase" value={form.phase} onChange={e=>set("phase",e.target.value)} options={PHASES}/><Select label="Status" value={form.status} onChange={e=>set("status",e.target.value)} options={["Active","Breached","Passed","Payout"]}/><Input label="Account Size ($)" type="number" value={form.size} onChange={e=>set("size",+e.target.value)}/><Input label="Current Balance ($)" type="number" value={form.currentBalance} onChange={e=>set("currentBalance",+e.target.value)}/><Input label="Max DD ($)" type="number" value={form.maxLoss} onChange={e=>set("maxLoss",+e.target.value)}/><Input label="Daily Limit ($)" type="number" value={form.dailyLoss} onChange={e=>set("dailyLoss",+e.target.value)}/><Input label="Profit Target ($)" type="number" value={form.profitTarget} onChange={e=>set("profitTarget",+e.target.value)}/></div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn variant="ghost" onClick={onCancel}>Cancel</Btn><Btn variant="primary" onClick={()=>onSave(form)}>Save</Btn></div></div>;}
 
 // ─── SETTINGS MODAL ───────────────────────────────────────────────────────────
-function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, customModels, customConcepts, onProfileSaved }) {
+function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, customModels, customConcepts, onProfileSaved, customization, onCustomizationSaved }) {
   const [tab, setTab] = useState("profile");
   const [uname, setUname] = useState(username || "");
   const [avUrl, setAvUrl] = useState(avatarUrl || "");
@@ -369,6 +529,15 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
   const [importing, setImporting] = useState(false);
   const fileRef = useRef();
   const csvRef = useRef();
+
+  // Customization state
+  const [accent, setAccent] = useState(customization?.accent || "#38bdf8");
+  const [cardStyle, setCardStyle] = useState(customization?.cardStyle || "glass");
+  const [compactMode, setCompactMode] = useState(customization?.compactMode || false);
+  const [showWelcome, setShowWelcome] = useState(customization?.showWelcome !== false);
+  const [defaultSession, setDefaultSession] = useState(customization?.defaultSession || "NY AM");
+  const [defaultInstrument, setDefaultInstrument] = useState(customization?.defaultInstrument || "NQ");
+  const [savingCustom, setSavingCustom] = useState(false);
 
   const saveProfile = async () => {
     setSaving(true);
@@ -459,7 +628,7 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: 2, padding: "10px 22px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", gap: 2, padding: "10px 22px", borderBottom: "1px solid rgba(255,255,255,0.06)", justifyContent: "center" }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif", background: tab === t.id ? "rgba(56,189,248,0.15)" : "transparent", color: tab === t.id ? "#38bdf8" : "rgba(255,255,255,0.4)" }}>{t.label}</button>
           ))}
@@ -533,12 +702,104 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
 
           {/* ── CUSTOMIZE TAB ── */}
           {tab === "customize" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", textAlign: "center", padding: 20 }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>🎨</div>
-                Custom models and concepts can be added directly in the trade form.<br/>
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>Theme customization coming soon.</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+              {/* Accent Color */}
+              <div style={sbox}>
+                <div style={{ ...ulbl, marginBottom: 10 }}>Accent Color</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[["#38bdf8","Sky Blue"],["#6366f1","Indigo"],["#4ade80","Green"],["#f59e0b","Amber"],["#f87171","Red"],["#c084fc","Purple"],["#fb923c","Orange"],["#e2e8f0","White"]].map(([c, name]) => (
+                    <button key={c} onClick={() => setAccent(c)} title={name} style={{ width: 28, height: 28, borderRadius: "50%", background: c, border: accent === c ? `3px solid #fff` : "3px solid transparent", cursor: "pointer", boxShadow: accent === c ? `0 0 0 2px ${c}` : "none", transition: "all 0.15s" }} />
+                  ))}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>Custom:</span>
+                    <input type="color" value={accent} onChange={e => setAccent(e.target.value)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", cursor: "pointer", background: "none", padding: 0 }} />
+                  </div>
+                </div>
               </div>
+
+              {/* Card Style */}
+              <div style={sbox}>
+                <div style={{ ...ulbl, marginBottom: 10 }}>Card Style</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[["glass","Glass"],["solid","Solid"],["outline","Outline"]].map(([v, l]) => (
+                    <button key={v} onClick={() => setCardStyle(v)} style={{ padding: "7px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: cardStyle === v ? "none" : "1px solid rgba(255,255,255,0.1)", background: cardStyle === v ? "rgba(56,189,248,0.15)" : "transparent", color: cardStyle === v ? "#38bdf8" : "rgba(255,255,255,0.4)", cursor: "pointer" }}>{l}</button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 6 }}>Controls background style of dashboard cards</div>
+              </div>
+
+              {/* Compact Mode */}
+              <div style={sbox}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ ...ulbl, marginBottom: 2 }}>Compact Mode</div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>Reduce padding and spacing for more data density</div>
+                  </div>
+                  <button onClick={() => setCompactMode(p => !p)} style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer", background: compactMode ? "#38bdf8" : "rgba(255,255,255,0.1)", position: "relative", transition: "background 0.2s" }}>
+                    <div style={{ position: "absolute", top: 3, left: compactMode ? 20 : 3, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Show Welcome */}
+              <div style={sbox}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ ...ulbl, marginBottom: 2 }}>Show Greeting</div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>Show "Hello, username" on the dashboard</div>
+                  </div>
+                  <button onClick={() => setShowWelcome(p => !p)} style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer", background: showWelcome ? "#38bdf8" : "rgba(255,255,255,0.1)", position: "relative", transition: "background 0.2s" }}>
+                    <div style={{ position: "absolute", top: 3, left: showWelcome ? 20 : 3, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Default Trade Defaults */}
+              <div style={sbox}>
+                <div style={{ ...ulbl, marginBottom: 10 }}>Trade Form Defaults</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <label style={{ ...ulbl, display: "block", marginBottom: 4 }}>Default Session</label>
+                    <select value={defaultSession} onChange={e => setDefaultSession(e.target.value)} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 7, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "'DM Mono',monospace", outline: "none", width: "100%" }}>
+                      {SESSIONS.map(s => <option key={s} value={s} style={{ background: "#111" }}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ ...ulbl, display: "block", marginBottom: 4 }}>Default Instrument</label>
+                    <select value={defaultInstrument} onChange={e => setDefaultInstrument(e.target.value)} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 7, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "'DM Mono',monospace", outline: "none", width: "100%" }}>
+                      {INSTRUMENTS.map(i => <option key={i} value={i} style={{ background: "#111" }}>{i}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom Models */}
+              <div style={sbox}>
+                <div style={{ ...ulbl, marginBottom: 6 }}>Custom Entry Models ({customModels.length})</div>
+                {customModels.length > 0
+                  ? <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{customModels.map(m => <span key={m} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "rgba(56,189,248,0.12)", color: "#38bdf8", border: "1px solid rgba(56,189,248,0.2)" }}>{m}</span>)}</div>
+                  : <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>None yet — add them in the trade form</div>}
+              </div>
+
+              {/* Custom Concepts */}
+              <div style={sbox}>
+                <div style={{ ...ulbl, marginBottom: 6 }}>Custom ICT Concepts ({customConcepts.length})</div>
+                {customConcepts.length > 0
+                  ? <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{customConcepts.map(c => <span key={c} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, background: "rgba(168,85,247,0.12)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.2)" }}>{c}</span>)}</div>
+                  : <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>None yet — add them in the trade form</div>}
+              </div>
+
+              {saveMsg && <div style={{ fontSize: 12, color: "#4ade80", background: "rgba(34,197,94,0.08)", padding: "8px 12px", borderRadius: 6 }}>{saveMsg}</div>}
+              <Btn variant="primary" onClick={async () => {
+                setSavingCustom(true);
+                const cfg = { accent, cardStyle, compactMode, showWelcome, defaultSession, defaultInstrument };
+                await supabase.from("profiles").update({ customization: cfg }).eq("id", user.id);
+                onCustomizationSaved(cfg);
+                setSaveMsg("Customization saved!");
+                setSavingCustom(false);
+                setTimeout(() => setSaveMsg(""), 2000);
+              }} style={{ opacity: savingCustom ? 0.6 : 1 }}>{savingCustom ? "Saving..." : "Save Customization"}</Btn>
             </div>
           )}
         </div>
@@ -685,6 +946,7 @@ export default function TradingJournal() {
   const [showSettings, setShowSettings] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [needsUsername, setNeedsUsername] = useState(false);
+  const [customization, setCustomization] = useState({ accent: "#38bdf8", cardStyle: "glass", compactMode: false, showWelcome: true, defaultSession: "NY AM", defaultInstrument: "NQ" });
   const userMenuRef = useRef();
 
   // Auth
@@ -721,6 +983,7 @@ export default function TradingJournal() {
       const av = pD?.avatar_url || "";
       setUsername(un);
       setAvatarUrl(av);
+      if (pD?.customization) setCustomization(prev => ({ ...prev, ...pD.customization }));
       // Prompt for username if signed in with Google or missing
       if (!un) setNeedsUsername(true);
       setDL(false);
@@ -847,7 +1110,7 @@ export default function TradingJournal() {
   // Avatar component
   const displayName = username || user?.email?.split("@")[0] || "?";
   const AvatarCircle = ({ size = 32 }) => (
-    <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, fontWeight: 800, color: "#fff", cursor: "pointer", flexShrink: 0, border: "2px solid rgba(255,255,255,0.1)" }}>
+    <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, fontWeight: 800, color: "#fff", cursor: "pointer", flexShrink: 0 }}>
       {avatarUrl ? <img src={avatarUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarUrl("")} /> : displayName[0].toUpperCase()}
     </div>
   );
@@ -856,9 +1119,18 @@ export default function TradingJournal() {
   if (!user) return <AuthScreen />;
 
   return (
-    <div style={{ fontFamily: "'DM Mono','JetBrains Mono',monospace", background: "#0a0a0a", color: "#e2e8f0", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ fontFamily: "'DM Mono','JetBrains Mono',monospace", background: "#0a0a0a", color: "#e2e8f0", height: "100vh", width: "100vw", display: "flex", flexDirection: "column", overflow: "hidden", position: "fixed", inset: 0 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet" />
-      <style>{`*{box-sizing:border-box}input,select,textarea,button{font-family:inherit}`}</style>
+      <style>{`
+        *{box-sizing:border-box}
+        html,body,#root{height:100%;width:100%;margin:0;padding:0;overflow:hidden}
+        input,select,textarea,button{font-family:inherit}
+        @media(max-width:640px){.hide-mobile{display:none!important}}
+        :root{--accent:${customization.accent};--card-bg:${customization.cardStyle==="solid"?"rgba(20,20,28,0.98)":customization.cardStyle==="outline"?"transparent":"rgba(255,255,255,0.025)"};--card-border:${customization.cardStyle==="outline"?"1px solid rgba(255,255,255,0.12)":"1px solid rgba(255,255,255,0.06)"}}
+        .accent-text{color:var(--accent)!important}
+        .app-card{background:var(--card-bg)!important;border:var(--card-border)!important}
+        ${customization.compactMode ? ".compact-pad{padding:10px 12px!important}.compact-gap{gap:8px!important}" : ""}
+      `}</style>
 
       {/* Username setup modal */}
       {needsUsername && <UsernameSetupModal onSave={handleSetUsername} />}
@@ -875,6 +1147,8 @@ export default function TradingJournal() {
           customModels={customModels}
           customConcepts={customConcepts}
           onProfileSaved={(un, av) => { setUsername(un); setAvatarUrl(av); }}
+          customization={customization}
+          onCustomizationSaved={(cfg) => setCustomization(cfg)}
         />
       )}
 
@@ -882,7 +1156,9 @@ export default function TradingJournal() {
       <div style={{ padding: isMobile ? "12px 16px" : "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.015)", flexWrap: "wrap", gap: 8 }}>
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif", color: "#fff" }}>J</div>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
           <div>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: isMobile ? 14 : 16, letterSpacing: "-0.02em" }}>ICT JOURNAL</div>
             {!isMobile && <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Futures · Prop Firm Tracker</div>}
@@ -933,16 +1209,18 @@ export default function TradingJournal() {
       {dbLoading ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.2)" }}>Loading data...</div>
       ) : (
-        <div style={{ padding: isMobile ? "16px" : "20px 24px", flex: 1, overflowY: "auto" }}>
+        <div style={{ padding: isMobile ? "16px" : "20px 24px", flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                <div>
-                  {username && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>Hello, <span style={{ color: "#38bdf8", fontWeight: 700 }}>{username}</span> 👋</div>}
-                  <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Dashboard</h2>
-                  {selectedDay && <button onClick={() => setSD(null)} style={{ background: "none", border: "none", color: "#38bdf8", fontSize: 11, cursor: "pointer", padding: 0, marginTop: 4 }}>Showing {selectedDay} — clear</button>}
+                <div style={{ flex: 1 }}>
+                  <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0, textAlign: "center" }}>
+                    {customization.showWelcome !== false && username && <span style={{ fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 4 }}>Hello, <span style={{ color: customization.accent || "#38bdf8", fontWeight: 700 }}>{username}</span> 👋</span>}
+                    Dashboard
+                  </h2>
+                  {selectedDay && <button onClick={() => setSD(null)} style={{ background: "none", border: "none", color: customization.accent || "#38bdf8", fontSize: 11, cursor: "pointer", padding: 0, marginTop: 4, display: "block", textAlign: "center", width: "100%" }}>Showing {selectedDay} — clear</button>}
                 </div>
                 <Btn variant="primary" onClick={() => setView("addTrade")}>+ New Trade</Btn>
               </div>
@@ -967,12 +1245,12 @@ export default function TradingJournal() {
                 <PnlCalendar trades={trades} onDayClick={d => setSD(d === selectedDay ? null : d)} />
                 <div style={sbox}>
                   <div style={{ ...ulbl, marginBottom: 10 }}>Equity Curve</div>
-                  {filtered.length ? <PnlChart trades={filtered} /> : <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades</div>}
+                  <EquityCurve trades={filtered} />
                 </div>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr", gap: 14 }}>
-                <div style={sbox}><div style={{ ...ulbl, marginBottom: 10 }}>By Session</div>{Object.entries(sessionStats).length ? Object.entries(sessionStats).map(([s, d]) => <div key={s} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12 }}><span>{s}</span><span style={{ color: d.pnl >= 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>${d.pnl.toFixed(0)} ({d.count})</span></div>) : <div style={{ color: "rgba(255,255,255,0.15)", fontSize: 11 }}>No data</div>}</div>
+                <div style={sbox}><div style={{ ...ulbl, marginBottom: 10 }}>By Session</div>{SESSIONS.map(s => { const d = sessionStats[s]; return d ? <div key={s} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12 }}><span>{s}</span><span style={{ color: d.pnl >= 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>${d.pnl.toFixed(0)} ({d.count})</span></div> : <div key={s} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12 }}><span style={{ color: "rgba(255,255,255,0.35)" }}>{s}</span><span style={{ color: "rgba(255,255,255,0.2)", fontWeight: 600 }}>$0 (0)</span></div>; })}</div>
                 <div style={sbox}><div style={{ ...ulbl, marginBottom: 10 }}>Top ICT Concepts</div>{Object.entries(conceptStats).length ? Object.entries(conceptStats).sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 6).map(([c, d]) => <div key={c} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12 }}><span style={{ color: "#c084fc" }}>{c}</span><span style={{ color: d.pnl >= 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>${d.pnl.toFixed(0)} ({d.count})</span></div>) : <div style={{ color: "rgba(255,255,255,0.15)", fontSize: 11 }}>No data</div>}</div>
                 <div style={sbox}><div style={{ ...ulbl, marginBottom: 10 }}>Top Mistakes</div>{Object.entries(mistakeStats).length ? Object.entries(mistakeStats).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([m, c]) => <div key={m} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12 }}><span style={{ color: "#f87171" }}>{m}</span><span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 600 }}>{c}x</span></div>) : <div style={{ color: "rgba(255,255,255,0.15)", fontSize: 11 }}>No data</div>}</div>
               </div>
@@ -1052,6 +1330,7 @@ export default function TradingJournal() {
               <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>{view === "addTrade" ? "Log Trade" : "Edit Trade"}</h2>
               <div style={{ ...sbox, padding: 22 }}>
                 <TradeForm trade={view === "editTrade" ? editItem : null} accounts={accounts} customModels={customModels} customConcepts={customConcepts}
+                  defaultSession={customization.defaultSession} defaultInstrument={customization.defaultInstrument}
                   onSave={async f => { if (view === "editTrade") await updateTrade(f); else await addTrade(f); setView("trades"); }}
                   onCancel={() => setView("trades")} onAddModel={saveModel} onAddConcept={saveConcept} />
               </div>
