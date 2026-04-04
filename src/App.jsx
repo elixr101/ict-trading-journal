@@ -242,7 +242,7 @@ function AccountProgress({account}){if(!account.profitTarget)return null;const p
 function DayOfWeekWidget({trades}){const stats=useMemo(()=>{const m={};["Mon","Tue","Wed","Thu","Fri"].forEach(d=>m[d]={w:0,t:0,pnl:0});trades.forEach(t=>{if(!t.date)return;const d=new Date(t.date+"T12:00:00");const day=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];if(!m[day])return;m[day].t++;m[day].pnl+=t.pnl;if(t.pnl>0)m[day].w++;});return m;},[trades]);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Day of Week</div>{Object.entries(stats).map(([day,d])=><div key={day} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)",fontSize:12}}><span>{day}</span><div style={{display:"flex",gap:12}}><span style={{color:"rgba(255,255,255,0.35)",fontSize:10}}>{d.t?((d.w/d.t)*100).toFixed(0):0}% WR</span><span style={{color:d.pnl>=0?"#4ade80":"#f87171",fontWeight:600,minWidth:60,textAlign:"right"}}>${d.pnl.toFixed(0)}</span></div></div>)}</div>;}
 function ConfluenceHeatmap({trades}){const stats=useMemo(()=>{const b={"High Edge (8-10)":{w:0,t:0,pnl:0,c:"#4ade80"},"Med Edge (5-7)":{w:0,t:0,pnl:0,c:"#fbbf24"},"Low Edge (0-4)":{w:0,t:0,pnl:0,c:"#f87171"}};trades.forEach(t=>{const sc=t.confluenceScore||0;const k=sc>=8?"High Edge (8-10)":sc>=5?"Med Edge (5-7)":"Low Edge (0-4)";b[k].t++;b[k].pnl+=t.pnl;if(t.pnl>0)b[k].w++;});return b;},[trades]);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Confluence Heatmap</div>{Object.entries(stats).map(([l,d])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)",fontSize:12}}><span style={{color:d.c,fontWeight:600}}>{l}</span><div style={{display:"flex",gap:12}}><span style={{color:"rgba(255,255,255,0.35)",fontSize:10}}>{d.t?((d.w/d.t)*100).toFixed(0):0}% WR</span><span style={{color:d.pnl>=0?"#4ade80":"#f87171",fontWeight:600,minWidth:60,textAlign:"right"}}>${d.pnl.toFixed(0)}</span></div></div>)}</div>;}
 function DrawdownBufferWidget({accounts}){const act=accounts.filter(a=>a.status==="Active"&&a.maxLoss>0);if(!act.length)return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trailing Drawdown Buffer</div><div style={{fontSize:11,color:"rgba(255,255,255,0.2)"}}>No active prop accounts with Max DD set</div></div>;return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trailing Drawdown Buffer</div>{act.map(a=>{const hwm=Math.max(a.size,...(a.balanceHistory||[]));const ddLimit=hwm-a.maxLoss;const buffer=a.currentBalance-ddLimit;const bufferPct=Math.max(0,Math.min(100,(buffer/a.maxLoss)*100));return<div key={a.id} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}><span style={{fontWeight:600,color:"rgba(255,255,255,0.7)"}}>{a.name}</span><span style={{color:buffer>0?"#4ade80":"#f87171",fontFamily:"'DM Mono',monospace",fontWeight:800}}>${buffer.toFixed(0)} away from rule</span></div><div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${bufferPct}%`,background:bufferPct>30?"#4ade80":bufferPct>15?"#fbbf24":"#f87171",borderRadius:3,transition:"width 0.3s"}}/></div></div>;})}</div>;}
-function TradeDurationWidget({trades}){const data=useMemo(()=>{return trades.filter(t=>t.time&&t.exitTime).map(t=>{const[h1,m1]=t.time.split(":").map(Number);const[h2,m2]=t.exitTime.split(":").map(Number);let d=(h2*60+m2)-(h1*60+m1);if(d<0)d+=1440;return{d,p:t.pnl,id:t.id};});},[trades]);if(data.length<2)return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trade Duration vs P&L</div><div style={{fontSize:11,color:"rgba(255,255,255,0.2)",padding:"20px 0",textAlign:"center"}}>Log Entry & Exit times to generate scatter plot</div></div>;const maxD=Math.max(...data.map(d=>d.d),60);const maxP=Math.max(...data.map(d=>d.p),100);const minP=Math.min(...data.map(d=>d.p),-100);const rng=maxP-minP||1;const toX=v=>5+(v/maxD)*90;const toY=v=>90-((v-minP)/rng)*80;const zY=toY(0);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Duration vs P&L Scatter</div><div style={{position:"relative",height:140,width:"100%"}}><div style={{position:"absolute",top:`${zY}%`,left:0,right:0,height:1,borderTop:"1px dashed rgba(255,255,255,0.15)"}}/>{data.map(d=><div key={d.id} style={{position:"absolute",left:`${toX(d.d)}%`,top:`${toY(d.p)}%`,width:10,height:10,minWidth:10,minHeight:10,borderRadius:"50%",background:d.p>=0?"#4ade80":"#f87171",transform:"translate(-50%,-50%)",boxShadow:"0 0 0 2px #000",transition:"all 0.2s cubic-bezier(0.16,1,0.3,1)",cursor:"pointer",zIndex:10}} onMouseEnter={e=>{e.target.style.transform="translate(-50%,-50%) scale(1.6)";e.target.style.boxShadow="0 0 0 2px #fff";e.target.style.zIndex=20;}} onMouseLeave={e=>{e.target.style.transform="translate(-50%,-50%) scale(1)";e.target.style.boxShadow="0 0 0 2px #000";e.target.style.zIndex=10;}}/>)}<div style={{position:"absolute",bottom:-12,left:0,right:0,display:"flex",justifyContent:"space-between",fontSize:9,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.3)",pointerEvents:"none"}}><span>0m</span><span>{Math.round(maxD/2)}m</span><span>{maxD}m</span></div></div></div>;}
+function TradeDurationWidget({trades}){const[hovered,setHovered]=useState(null);const data=useMemo(()=>{return trades.filter(t=>t.time&&t.exitTime).map(t=>{const[h1,m1]=t.time.split(":").map(Number);const[h2,m2]=t.exitTime.split(":").map(Number);let d=(h2*60+m2)-(h1*60+m1);if(d<0)d+=1440;return{d,p:t.pnl,id:t.id,instrument:t.instrument,direction:t.direction,session:t.session,date:t.date,rr:t.rr,entry:t.entry,exit:t.exit};});},[trades]);if(data.length<2)return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trade Duration vs P&L</div><div style={{fontSize:11,color:"rgba(255,255,255,0.2)",padding:"20px 0",textAlign:"center"}}>Log Entry & Exit times to generate scatter plot</div></div>;const maxD=Math.max(...data.map(d=>d.d),60);const rawMaxP=Math.max(...data.map(d=>d.p),100);const rawMinP=Math.min(...data.map(d=>d.p),-100);const pBuffer=(rawMaxP-rawMinP)*0.12||50;const maxP=rawMaxP+pBuffer;const minP=rawMinP-pBuffer;const rng=maxP-minP||1;const toX=v=>5+(v/maxD)*90;const toY=v=>6+((maxP-v)/rng)*68;const zY=toY(0);const xTicks=[];const step=maxD<=30?5:maxD<=60?10:maxD<=120?15:maxD<=300?30:60;for(let i=0;i<=maxD;i+=step)xTicks.push(i);if(xTicks[xTicks.length-1]<maxD)xTicks.push(maxD);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Duration vs P&L Scatter</div><div style={{position:"relative",height:180,width:"100%"}}>{/* Y axis zero line */}<div style={{position:"absolute",top:`${zY}%`,left:"5%",right:"5%",height:1,borderTop:"1px dashed rgba(255,255,255,0.15)"}}/>{/* Y axis labels */}<div style={{position:"absolute",left:0,top:`${toY(rawMaxP)}%`,fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.25)",transform:"translateY(-50%)"}}>${rawMaxP>0?"+":""}{rawMaxP.toFixed(0)}</div><div style={{position:"absolute",left:0,top:`${toY(rawMinP)}%`,fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.25)",transform:"translateY(-50%)"}}>${rawMinP.toFixed(0)}</div>{/* X axis line - positioned with buffer below lowest possible dot */}<div style={{position:"absolute",top:"80%",left:"5%",right:"5%",height:1,background:"rgba(255,255,255,0.08)"}}/>{/* X axis ticks */}{xTicks.map(t=><div key={t} style={{position:"absolute",top:"83%",left:`${toX(t)}%`,transform:"translateX(-50%)",fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.3)"}}>{t}m</div>)}{/* X axis tick marks */}{xTicks.map(t=><div key={`tm${t}`} style={{position:"absolute",top:"79%",left:`${toX(t)}%`,width:1,height:4,background:"rgba(255,255,255,0.15)"}}/> )}{/* Dots */}{data.map(d=><div key={d.id} style={{position:"absolute",left:`${toX(d.d)}%`,top:`${toY(d.p)}%`,width:10,height:10,minWidth:10,minHeight:10,borderRadius:"50%",background:d.p>=0?"#4ade80":"#f87171",transform:`translate(-50%,-50%)${hovered===d.id?" scale(1.6)":""}`,boxShadow:hovered===d.id?"0 0 0 2px #fff":"0 0 0 2px #000",transition:"all 0.2s cubic-bezier(0.16,1,0.3,1)",cursor:"pointer",zIndex:hovered===d.id?20:10}} onMouseEnter={()=>setHovered(d.id)} onMouseLeave={()=>setHovered(null)}/>)}{/* Tooltip */}{hovered&&(()=>{const d=data.find(x=>x.id===hovered);if(!d)return null;const tx=toX(d.d);const ty=toY(d.p);return<div style={{position:"absolute",left:`${Math.min(Math.max(tx,15),85)}%`,top:`${Math.max(ty-2,0)}%`,transform:"translate(-50%,-100%)",background:"#000",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"8px 12px",fontSize:10,pointerEvents:"none",zIndex:30,whiteSpace:"nowrap",boxShadow:"0 4px 16px rgba(0,0,0,0.6)"}}><div style={{fontWeight:800,color:d.p>=0?"#4ade80":"#f87171",fontSize:13,marginBottom:4}}>{d.p>=0?"+":""}${d.p.toFixed(2)}</div><div style={{color:"rgba(255,255,255,0.5)",lineHeight:1.6}}><div><span style={{color:"#38bdf8",fontWeight:600}}>{d.instrument}</span> · {d.direction==="Long"?"Long":"Short"} · {d.rr||"--"}</div><div>{d.date} · {d.session}</div><div>Duration: <span style={{color:"#e2e8f0",fontWeight:600}}>{d.d}m</span></div><div>Entry: {d.entry||"--"} → Exit: {d.exit||"--"}</div></div></div>;})()}<div style={{position:"absolute",top:"90%",left:"5%",right:"5%",display:"flex",justifyContent:"center",fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.2)",letterSpacing:"0.1em",textTransform:"uppercase"}}>DURATION (MINUTES)</div></div></div>;}
 
 // ─── S&P 500 COMPARISON ───────────────────────────────────────────────────────
 function generateSPCurve(nPoints, totalReturnPct) {
@@ -924,6 +924,381 @@ function AuthScreen() {
   );
 }
 
+// ─── POSITION SIZE CALCULATOR (FULL PAGE) ─────────────────────────────────────
+function PositionSizeCalcPage({ accounts }) {
+  const { isMobile } = useIsMobile();
+  const [acctBal, setAcctBal] = useState("");
+  const [riskPct, setRiskPct] = useState("1");
+  const [instrument, setInstrument] = useState("NQ");
+  const [stopTicks, setStopTicks] = useState("");
+  const [targetTicks, setTargetTicks] = useState("");
+
+  const balance = parseFloat(acctBal) || 0;
+  const risk = parseFloat(riskPct) || 0;
+  const ticks = parseFloat(stopTicks) || 0;
+  const target = parseFloat(targetTicks) || 0;
+  const pv = PV[instrument] || 1;
+  const dollarRisk = balance * (risk / 100);
+  const riskPerContract = ticks * pv;
+  const posSize = riskPerContract > 0 ? Math.floor(dollarRisk / riskPerContract) : 0;
+  const actualRisk = posSize * riskPerContract;
+  const potentialReward = posSize * target * pv;
+  const rr = ticks > 0 && target > 0 ? (target / ticks).toFixed(2) : "--";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Position Size Calculator</h2>
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
+        {/* Input panel */}
+        <div style={{ ...sbox, padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ ...ulbl, marginBottom: 2 }}>Parameters</div>
+
+          {/* Quick-fill from accounts */}
+          {accounts.filter(a => a.status === "Active").length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 6 }}>Quick fill from account:</div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {accounts.filter(a => a.status === "Active").map(a => (
+                  <button key={a.id} onClick={() => setAcctBal(String(a.currentBalance))} style={{ fontSize: 10, padding: "5px 10px", borderRadius: 6, background: "rgba(56,189,248,0.08)", color: "#38bdf8", border: "1px solid rgba(56,189,248,0.15)", cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{a.name} · ${a.currentBalance.toLocaleString()}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Input label="Account Balance ($)" type="number" value={acctBal} onChange={e => setAcctBal(e.target.value)} placeholder="50000" />
+            <Input label="Risk %" type="number" step="0.25" value={riskPct} onChange={e => setRiskPct(e.target.value)} placeholder="1" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <Select label="Instrument" value={instrument} onChange={e => setInstrument(e.target.value)} options={INSTRUMENTS.map(i => ({ value: i, label: `${i} ($${PV[i]}/pt)` }))} />
+            <Input label="Stop (ticks)" type="number" step="0.25" value={stopTicks} onChange={e => setStopTicks(e.target.value)} placeholder="10" />
+            <Input label="Target (ticks)" type="number" step="0.25" value={targetTicks} onChange={e => setTargetTicks(e.target.value)} placeholder="20" />
+          </div>
+
+          {/* Visual risk slider */}
+          {balance > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                <span>Conservative (0.5%)</span>
+                <span>Aggressive (3%)</span>
+              </div>
+              <input type="range" min="0.25" max="3" step="0.25" value={riskPct || 1} onChange={e => setRiskPct(e.target.value)} style={{ width: "100%", accentColor: "#38bdf8" }} />
+            </div>
+          )}
+        </div>
+
+        {/* Results panel */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Main result */}
+          <div style={{ ...sbox, padding: 22, textAlign: "center" }}>
+            <div style={{ ...ulbl, marginBottom: 12 }}>Max Position Size</div>
+            <div style={{ fontSize: 56, fontWeight: 800, fontFamily: "'DM Mono',monospace", color: posSize > 0 ? "#4ade80" : "rgba(255,255,255,0.15)", lineHeight: 1, marginBottom: 8 }}>{posSize}</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>contract{posSize !== 1 ? "s" : ""} of <span style={{ color: "#38bdf8", fontWeight: 700 }}>{instrument}</span></div>
+          </div>
+
+          {/* Breakdown */}
+          <div style={{ ...sbox, padding: 18 }}>
+            <div style={{ ...ulbl, marginBottom: 10 }}>Breakdown</div>
+            {[
+              ["Dollar Risk", `$${dollarRisk.toFixed(2)}`, "#fbbf24"],
+              ["Risk Per Contract", `$${riskPerContract.toFixed(2)}`, "rgba(255,255,255,0.6)"],
+              ["Actual Risk", posSize > 0 ? `$${actualRisk.toFixed(2)} (${((actualRisk / balance) * 100).toFixed(2)}%)` : "--", "#f87171"],
+              ["Potential Reward", posSize > 0 && target > 0 ? `$${potentialReward.toFixed(2)}` : "--", "#4ade80"],
+              ["Risk : Reward", rr !== "--" ? `1 : ${rr}` : "--", "#c084fc"],
+            ].map(([label, value, color]) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "'DM Mono',monospace", color }}>{value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Scaling table */}
+          {posSize > 0 && (
+            <div style={{ ...sbox, padding: 18 }}>
+              <div style={{ ...ulbl, marginBottom: 10 }}>Scaling Options</div>
+              {[0.5, 0.75, 1, 1.5, 2].map(mult => {
+                const sz = Math.floor(posSize * mult);
+                const rk = sz * riskPerContract;
+                const pct = balance > 0 ? ((rk / balance) * 100).toFixed(2) : "0";
+                return (
+                  <div key={mult} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 11 }}>
+                    <span style={{ color: "rgba(255,255,255,0.35)" }}>{mult === 1 ? "Full" : `${mult}x`}</span>
+                    <span style={{ fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#e2e8f0" }}>{sz} ct{sz !== 1 ? "s" : ""}</span>
+                    <span style={{ color: parseFloat(pct) > 2 ? "#f87171" : parseFloat(pct) > 1 ? "#fbbf24" : "rgba(255,255,255,0.4)", fontFamily: "'DM Mono',monospace" }}>${rk.toFixed(0)} ({pct}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TILT ALERT SYSTEM ────────────────────────────────────────────────────────
+function TiltAlert({ trades, onDismiss }) {
+  const [dismissed, setDismissed] = useState({});
+
+  const alerts = useMemo(() => {
+    const result = [];
+    const today = new Date().toISOString().slice(0, 10);
+    const todayTrades = trades.filter(t => t.date === today).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+
+    // Check for 3 consecutive losses today
+    if (todayTrades.length >= 3) {
+      let consLosses = 0;
+      for (let i = todayTrades.length - 1; i >= 0; i--) {
+        if (todayTrades[i].pnl < 0) consLosses++;
+        else break;
+      }
+      if (consLosses >= 3) {
+        result.push({ id: "cons_loss_" + today, type: "loss_streak", severity: "high", title: "3+ Consecutive Losses Today", message: `You've taken ${consLosses} consecutive losses today. Consider stepping away from the screens, reviewing your process, and coming back with a clear head.`, icon: "🛑" });
+      }
+    }
+
+    // Check for negative emotions in recent trades (today)
+    const tiltEmotions = ["Revenge", "FOMO", "Frustrated", "Greedy", "Overconfident"];
+    const recentTilt = todayTrades.filter(t => (t.emotions || []).some(e => tiltEmotions.includes(e)));
+    if (recentTilt.length > 0) {
+      const tagged = [...new Set(recentTilt.flatMap(t => (t.emotions || []).filter(e => tiltEmotions.includes(e))))];
+      result.push({ id: "tilt_emo_" + today, type: "emotion", severity: tagged.includes("Revenge") ? "high" : "medium", title: "Tilt Detected", message: `You tagged ${tagged.join(", ")} on today's trades. This is your signal to pause. Walk away, breathe, and protect your capital.`, icon: "⚠️" });
+    }
+
+    // Check for excessive trading today (6+ trades)
+    if (todayTrades.length >= 6) {
+      result.push({ id: "overtrade_" + today, type: "overtrading", severity: "medium", title: "Overtrading Warning", message: `You've logged ${todayTrades.length} trades today. Quality over quantity. Consider whether your edge is still present.`, icon: "📊" });
+    }
+
+    return result.filter(a => !dismissed[a.id]);
+  }, [trades, dismissed]);
+
+  if (alerts.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, animation: "smoothFadeUp 0.4s ease" }}>
+      {alerts.map(alert => (
+        <div key={alert.id} style={{ background: alert.severity === "high" ? "rgba(239,68,68,0.08)" : "rgba(251,191,36,0.08)", border: `1px solid ${alert.severity === "high" ? "rgba(239,68,68,0.2)" : "rgba(251,191,36,0.2)"}`, borderRadius: 10, padding: "14px 18px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <span style={{ fontSize: 20, flexShrink: 0, marginTop: 2 }}>{alert.icon}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: alert.severity === "high" ? "#f87171" : "#fbbf24", marginBottom: 4 }}>{alert.title}</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>{alert.message}</div>
+          </div>
+          <button onClick={() => setDismissed(p => ({ ...p, [alert.id]: true }))} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.25)", cursor: "pointer", fontSize: 14, flexShrink: 0, padding: "2px 6px" }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── PRE-MARKET ROUTINE CHECKLIST ─────────────────────────────────────────────
+const PRE_MARKET_ITEMS = [
+  "Checked Economic Calendar (CPI/NFP/FOMC)",
+  "Slept 7+ hours",
+  "Reviewed HTF Bias (D/W/M levels)",
+  "Identified Key Levels & Liquidity Pools",
+  "Set Daily Loss Limit",
+  "Reviewed Yesterday's Trades",
+  "No Emotional Baggage from Prior Session",
+  "Physical Well-Being (Hydrated, Fed, Focused)",
+];
+
+function PreMarketChecklist({ trades, onComplete }) {
+  const [checked, setChecked] = useState({});
+  const [dismissed, setDismissed] = useState(false);
+  const [completedToday, setCompletedToday] = useState(false);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todayTrades = trades.filter(t => t.date === today);
+
+  // Check localStorage for completion
+  useEffect(() => {
+    try {
+      const stored = window._preMarketComplete;
+      if (stored === today) setCompletedToday(true);
+    } catch(e) {}
+  }, [today]);
+
+  const allChecked = PRE_MARKET_ITEMS.every((_, i) => checked[i]);
+  const checkedCount = Object.values(checked).filter(Boolean).length;
+
+  const handleComplete = () => {
+    try { window._preMarketComplete = today; } catch(e) {}
+    setCompletedToday(true);
+    if (onComplete) onComplete();
+  };
+
+  // Don't show if already completed today or dismissed
+  if (completedToday || dismissed) return null;
+
+  // Only show if no trades logged today (pre-market)
+  // or always show until completed
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1500, padding: 16, animation: "smoothFadeUp 0.4s ease" }}>
+      <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, width: "100%", maxWidth: 440, maxHeight: "85vh", overflow: "auto" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16 }}>Pre-Market Routine</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{today} · Complete before your first trade</div>
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: allChecked ? "#4ade80" : "rgba(255,255,255,0.3)" }}>{checkedCount}/{PRE_MARKET_ITEMS.length}</div>
+        </div>
+        <div style={{ padding: "16px 24px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {PRE_MARKET_ITEMS.map((item, i) => (
+              <button key={i} onClick={() => setChecked(p => ({ ...p, [i]: !p[i] }))} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: checked[i] ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.02)", border: `1px solid ${checked[i] ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.06)"}`, borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "all 0.2s" }}>
+                <div style={{ width: 20, height: 20, borderRadius: 5, border: checked[i] ? "none" : "2px solid rgba(255,255,255,0.15)", background: checked[i] ? "#4ade80" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s" }}>
+                  {checked[i] && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                </div>
+                <span style={{ fontSize: 12, color: checked[i] ? "#4ade80" : "rgba(255,255,255,0.6)", textDecoration: checked[i] ? "line-through" : "none", fontWeight: checked[i] ? 400 : 600, transition: "all 0.2s" }}>{item}</span>
+              </button>
+            ))}
+          </div>
+          {/* Progress bar */}
+          <div style={{ marginTop: 16, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${(checkedCount / PRE_MARKET_ITEMS.length) * 100}%`, background: allChecked ? "#4ade80" : "linear-gradient(90deg,#0ea5e9,#6366f1)", borderRadius: 2, transition: "width 0.4s cubic-bezier(0.16,1,0.3,1)" }} />
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button onClick={() => setDismissed(true)} style={{ flex: 1, padding: "10px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "rgba(255,255,255,0.35)", cursor: "pointer" }}>Skip Today</button>
+            <button onClick={handleComplete} disabled={!allChecked} style={{ flex: 1, padding: "10px", borderRadius: 7, fontSize: 12, fontWeight: 700, border: "none", background: allChecked ? "linear-gradient(135deg,#0ea5e9,#6366f1)" : "rgba(255,255,255,0.05)", color: allChecked ? "#fff" : "rgba(255,255,255,0.2)", cursor: allChecked ? "pointer" : "default", transition: "all 0.3s" }}>Ready to Trade ✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LAZY IMAGE ───────────────────────────────────────────────────────────────
+function LazyImage({ src, alt, style, onError }) {
+  const imgRef = useRef();
+  const [loaded, setLoaded] = useState(false);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setInView(true); obs.disconnect(); }
+    }, { rootMargin: "200px" });
+    if (imgRef.current) obs.observe(imgRef.current);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={imgRef} style={{ ...style, position: "relative", overflow: "hidden" }}>
+      {inView ? (
+        <img src={src} alt={alt} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: loaded ? 1 : 0, transition: "opacity 0.4s ease" }} onLoad={() => setLoaded(true)} onError={onError} />
+      ) : null}
+      {(!inView || !loaded) && (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.02)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 20, height: 20, border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "rgba(255,255,255,0.3)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TRADE LOG WITH PAGINATION ────────────────────────────────────────────────
+const TRADES_PER_PAGE = 50;
+
+function TradeLogPaginated({ filtered, filter, setFilter, setView, setEI, deleteTrade, customConcepts, tCols }) {
+  const [page, setPage] = useState(1);
+
+  const sorted = useMemo(() =>
+    [...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)),
+    [filtered]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / TRADES_PER_PAGE));
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1); }, [filtered.length]);
+
+  // Clamp page
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * TRADES_PER_PAGE;
+  const pageTrades = sorted.slice(startIdx, startIdx + TRADES_PER_PAGE);
+
+  // Generate page numbers to show
+  const pageNumbers = useMemo(() => {
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push("...");
+      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
+      if (currentPage < totalPages - 2) pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
+  }, [currentPage, totalPages]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Trade Log</h2>
+        <Btn variant="primary" onClick={() => setView("addTrade")}>+ New Trade</Btn>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <Pill label="All" active={!filter.instrument} onClick={() => setFilter(f => ({ ...f, instrument: "" }))} />
+        {INSTRUMENTS.map(i => <Pill key={i} label={i} active={filter.instrument === i} onClick={() => setFilter(f => ({ ...f, instrument: i }))} />)}
+        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)", margin: "0 3px" }} />
+        <Select value={filter.session} onChange={e => setFilter(f => ({ ...f, session: e.target.value }))} options={[{ value: "", label: "All Sessions" }, ...SESSIONS.map(s => ({ value: s, label: s }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 140 }} />
+        <Select value={filter.emotion} onChange={e => setFilter(f => ({ ...f, emotion: e.target.value }))} options={[{ value: "", label: "Emotion" }, ...EMOTIONS.map(e => ({ value: e, label: e }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 130 }} />
+        <Select value={filter.concept} onChange={e => setFilter(f => ({ ...f, concept: e.target.value }))} options={[{ value: "", label: "Concept" }, ...[...ICT_CONCEPTS, ...customConcepts].map(c => ({ value: c, label: c }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 140 }} />
+      </div>
+
+      {/* Trade count & page info */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
+        <span>{sorted.length} trade{sorted.length !== 1 ? "s" : ""} {sorted.length > TRADES_PER_PAGE ? `· Page ${currentPage} of ${totalPages}` : ""}</span>
+        {sorted.length > TRADES_PER_PAGE && <span>Showing {startIdx + 1}-{Math.min(startIdx + TRADES_PER_PAGE, sorted.length)}</span>}
+      </div>
+
+      <div style={{ ...sbox, padding: 0, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "grid", gridTemplateColumns: tCols, minWidth: 780, padding: "8px 14px", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          <span>Date</span><span>Instr</span><span>Sess</span><span>Dir</span><span>Ctrs</span><span>Entry</span><span>Exit</span><span>P&L</span><span>R:R</span><span>Model</span><span>Chart</span><span></span>
+        </div>
+        {pageTrades.map((t, idx) => (
+          <div key={t.id} className="page-fade-in" style={{ display: "grid", gridTemplateColumns: tCols, minWidth: 780, padding: "8px 14px", fontSize: 12, borderBottom: "1px solid rgba(255,255,255,0.03)", alignItems: "center", animationDelay: `${Math.min(idx * 15, 300)}ms`, opacity: 0 }}>
+            <span style={{ fontSize: 11 }}>{t.date}</span>
+            <span style={{ fontWeight: 700, color: "#38bdf8" }}>{t.instrument}</span>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{t.session}</span>
+            <span style={{ color: t.direction === "Long" ? "#4ade80" : "#f87171", fontWeight: 700, fontSize: 10 }}>{t.direction === "Long" ? "L" : "S"}</span>
+            <span>{t.contracts}</span>
+            <span style={{ fontSize: 11 }}>{t.entry}</span>
+            <span style={{ fontSize: 11 }}>{t.exit}</span>
+            <span style={{ fontWeight: 700, color: t.pnl >= 0 ? "#4ade80" : "#f87171" }}>${t.pnl}</span>
+            <span style={{ fontSize: 10, color: "#fbbf24" }}>{t.rr}</span>
+            <span style={{ fontSize: 9, color: "#38bdf8" }}>{t.entryModel ? (t.entryModel.length > 12 ? t.entryModel.slice(0, 10) + ".." : t.entryModel) : ""}</span>
+            <span>{t.chartUrl ? <a href={t.chartUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: "#c084fc", textDecoration: "none" }}>View</a> : ""}</span>
+            <div style={{ display: "flex", gap: 3 }}>
+              <button onClick={() => { setEI(t); setView("editTrade"); }} style={{ background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 4, color: "rgba(255,255,255,0.4)", padding: "3px 7px", cursor: "pointer", fontSize: 10 }}>Edit</button>
+              <button onClick={() => { if (confirm("Delete?")) deleteTrade(t.id); }} style={{ background: "rgba(239,68,68,0.08)", border: "none", borderRadius: 4, color: "#f87171", padding: "3px 7px", cursor: "pointer", fontSize: 10 }}>×</button>
+            </div>
+          </div>
+        ))}
+        {!sorted.length && <div style={{ padding: 36, textAlign: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades</div>}
+      </div>
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, paddingTop: 8, animation: "smoothFadeUp 0.3s ease" }}>
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: currentPage === 1 ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.5)", cursor: currentPage === 1 ? "default" : "pointer" }}>‹ Prev</button>
+          {pageNumbers.map((p, i) =>
+            p === "..." ? (
+              <span key={`dots${i}`} style={{ padding: "6px 4px", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>...</span>
+            ) : (
+              <button key={p} onClick={() => setPage(p)} style={{ padding: "6px 11px", borderRadius: 6, fontSize: 11, fontWeight: 700, border: "none", cursor: "pointer", background: currentPage === p ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.03)", color: currentPage === p ? "#38bdf8" : "rgba(255,255,255,0.35)", transition: "all 0.2s" }}>{p}</button>
+            )
+          )}
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: currentPage === totalPages ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.5)", cursor: currentPage === totalPages ? "default" : "pointer" }}>Next ›</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function TradingJournal() {
   const [user, setUser] = useState(null);
@@ -950,6 +1325,7 @@ export default function TradingJournal() {
   const [customization, setCustomization] = useState({ accent: "#38bdf8", cardStyle: "glass", compactMode: false, showWelcome: true, defaultSession: "NY AM", defaultInstrument: "NQ" });
   const userMenuRef = useRef();
   const [isScrolling, setIsScrolling] = useState(false);
+  const [showPreMarket, setShowPreMarket] = useState(true);
   const scrollTimeout = useRef(null);
   const handleScroll = () => { setIsScrolling(true); if (scrollTimeout.current) clearTimeout(scrollTimeout.current); scrollTimeout.current = setTimeout(() => setIsScrolling(false), 800); };
 
@@ -1108,7 +1484,7 @@ export default function TradingJournal() {
   });
 
   const tCols = "85px 50px 60px 48px 42px 72px 72px 65px 45px 1fr 50px 64px";
-  const navItems = [{ key: "dashboard", label: "Dashboard" }, { key: "trades", label: "Trades" }, { key: "accounts", label: "Accounts" }, { key: "montecarlo", label: "Monte Carlo" }, { key: "gallery", label: "Gallery" }];
+  const navItems = [{ key: "dashboard", label: "Dashboard" }, { key: "trades", label: "Trades" }, { key: "accounts", label: "Accounts" }, { key: "montecarlo", label: "Monte Carlo" }, { key: "sizecalc", label: "Size Calc" }, { key: "gallery", label: "Gallery" }];
   const isAct = k => view === k || (k === "trades" && (view === "addTrade" || view === "editTrade")) || (k === "accounts" && (view === "addAccount" || view === "editAccount"));
 
   // Avatar component
@@ -1189,6 +1565,16 @@ export default function TradingJournal() {
         .is-scrolling *::-webkit-scrollbar-thumb:hover { 
           background-color: rgba(255,255,255,0.35); 
         }
+        
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        
+        @keyframes pageFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .page-fade-in { animation: pageFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
 
       {/* Username setup modal */}
@@ -1210,6 +1596,9 @@ export default function TradingJournal() {
           onCustomizationSaved={(cfg) => setCustomization(cfg)}
         />
       )}
+
+      {/* Pre-Market Routine Checklist */}
+      {showPreMarket && <PreMarketChecklist trades={trades} onComplete={() => setShowPreMarket(false)} />}
 
       {/* ── HEADER ── */}
       <div style={{ padding: isMobile ? "12px 16px" : "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.015)", flexWrap: "wrap", gap: 8 }}>
@@ -1317,6 +1706,9 @@ export default function TradingJournal() {
                 <StatCard label="Streak" value={streak > 0 ? `${streak}W` : streak < 0 ? `${Math.abs(streak)}L` : "--"} accent={streak > 0 ? "#4ade80" : streak < 0 ? "#f87171" : "#e2e8f0"} sub={`${trades.length} total`} />
               </div>
 
+              {/* Tilt Alerts */}
+              <TiltAlert trades={trades} />
+
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
                 <PnlCalendar trades={trades} onDayClick={d => setSD(d === selectedDay ? null : d)} />
                 <div style={{...sbox, display: "flex", flexDirection: "column"}}>
@@ -1338,15 +1730,12 @@ export default function TradingJournal() {
                 <ConfluenceHeatmap trades={filtered} />
                 <TradeDurationWidget trades={filtered} />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14, marginTop: 14 }}>
-                <DrawdownBufferWidget accounts={accounts} />
-              </div>
-
-              {/* Active Accounts */}
-              {accounts.filter(a => a.status === "Active").length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginTop: 14 }}>
+                {/* Active Accounts - first */}
+                {accounts.filter(a => a.status === "Active").length > 0 ? (
                 <div style={sbox}>
                   <div style={{ ...ulbl, marginBottom: 10 }}>Active Accounts</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
                     {accounts.filter(a => a.status === "Active").map(a => (
                       <div key={a.id} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 8, padding: 12 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1360,51 +1749,21 @@ export default function TradingJournal() {
                     ))}
                   </div>
                 </div>
-              )}
+                ) : (
+                <div style={sbox}>
+                  <div style={{ ...ulbl, marginBottom: 10 }}>Active Accounts</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>No active accounts</div>
+                </div>
+                )}
+                {/* Trailing Drawdown Buffer - second */}
+                <DrawdownBufferWidget accounts={accounts} />
+              </div>
             </div>
           )}
 
           {/* TRADES */}
           {view === "trades" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Trade Log</h2>
-                <Btn variant="primary" onClick={() => setView("addTrade")}>+ New Trade</Btn>
-              </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <Pill label="All" active={!filter.instrument} onClick={() => setFilter(f => ({ ...f, instrument: "" }))} />
-                {INSTRUMENTS.map(i => <Pill key={i} label={i} active={filter.instrument === i} onClick={() => setFilter(f => ({ ...f, instrument: i }))} />)}
-                <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)", margin: "0 3px" }} />
-                <Select value={filter.session} onChange={e => setFilter(f => ({ ...f, session: e.target.value }))} options={[{ value: "", label: "All Sessions" }, ...SESSIONS.map(s => ({ value: s, label: s }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 140 }} />
-                <Select value={filter.emotion} onChange={e => setFilter(f => ({ ...f, emotion: e.target.value }))} options={[{ value: "", label: "Emotion" }, ...EMOTIONS.map(e => ({ value: e, label: e }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 130 }} />
-                <Select value={filter.concept} onChange={e => setFilter(f => ({ ...f, concept: e.target.value }))} options={[{ value: "", label: "Concept" }, ...[...ICT_CONCEPTS, ...customConcepts].map(c => ({ value: c, label: c }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 140 }} />
-              </div>
-              <div style={{ ...sbox, padding: 0, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
-                <div style={{ display: "grid", gridTemplateColumns: tCols, minWidth: 780, padding: "8px 14px", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                  <span>Date</span><span>Instr</span><span>Sess</span><span>Dir</span><span>Ctrs</span><span>Entry</span><span>Exit</span><span>P&L</span><span>R:R</span><span>Model</span><span>Chart</span><span></span>
-                </div>
-                {filtered.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).map(t => (
-                  <div key={t.id} style={{ display: "grid", gridTemplateColumns: tCols, minWidth: 780, padding: "8px 14px", fontSize: 12, borderBottom: "1px solid rgba(255,255,255,0.03)", alignItems: "center" }}>
-                    <span style={{ fontSize: 11 }}>{t.date}</span>
-                    <span style={{ fontWeight: 700, color: "#38bdf8" }}>{t.instrument}</span>
-                    <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{t.session}</span>
-                    <span style={{ color: t.direction === "Long" ? "#4ade80" : "#f87171", fontWeight: 700, fontSize: 10 }}>{t.direction === "Long" ? "L" : "S"}</span>
-                    <span>{t.contracts}</span>
-                    <span style={{ fontSize: 11 }}>{t.entry}</span>
-                    <span style={{ fontSize: 11 }}>{t.exit}</span>
-                    <span style={{ fontWeight: 700, color: t.pnl >= 0 ? "#4ade80" : "#f87171" }}>${t.pnl}</span>
-                    <span style={{ fontSize: 10, color: "#fbbf24" }}>{t.rr}</span>
-                    <span style={{ fontSize: 9, color: "#38bdf8" }}>{t.entryModel ? (t.entryModel.length > 12 ? t.entryModel.slice(0, 10) + ".." : t.entryModel) : ""}</span>
-                    <span>{t.chartUrl ? <a href={t.chartUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: "#c084fc", textDecoration: "none" }}>View</a> : ""}</span>
-                    <div style={{ display: "flex", gap: 3 }}>
-                      <button onClick={() => { setEI(t); setView("editTrade"); }} style={{ background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 4, color: "rgba(255,255,255,0.4)", padding: "3px 7px", cursor: "pointer", fontSize: 10 }}>Edit</button>
-                      <button onClick={() => { if (confirm("Delete?")) deleteTrade(t.id); }} style={{ background: "rgba(239,68,68,0.08)", border: "none", borderRadius: 4, color: "#f87171", padding: "3px 7px", cursor: "pointer", fontSize: 10 }}>×</button>
-                    </div>
-                  </div>
-                ))}
-                {!filtered.length && <div style={{ padding: 36, textAlign: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades</div>}
-              </div>
-            </div>
+            <TradeLogPaginated filtered={filtered} filter={filter} setFilter={setFilter} setView={setView} setEI={setEI} deleteTrade={deleteTrade} customConcepts={customConcepts} tCols={tCols} />
           )}
 
           {/* ADD / EDIT TRADE */}
@@ -1473,6 +1832,9 @@ export default function TradingJournal() {
           {/* MONTE CARLO */}
           {view === "montecarlo" && <MonteCarloSim trades={trades} />}
 
+          {/* SIZE CALCULATOR */}
+          {view === "sizecalc" && <PositionSizeCalcPage accounts={accounts} />}
+
           {/* GALLERY */}
           {view === "gallery" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1483,7 +1845,7 @@ export default function TradingJournal() {
                 {trades.filter(t => t.chartUrl).sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time)).map(t => (
                   <div key={t.id} className="app-card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", borderRadius: 10, transition: "transform 0.2s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
                     <a href={t.chartUrl} target="_blank" rel="noopener noreferrer" style={{ display: "block", height: 160, background: "rgba(0,0,0,0.2)", position: "relative" }} title="Click to open link">
-                      <img src={t.chartUrl} alt="Chart" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e)=>{e.target.src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'><rect width='100%25' height='100%25' fill='%230a0a0a'/><text x='50%25' y='50%25' fill='%23555' font-family='monospace' font-size='11' text-anchor='middle' dominant-baseline='middle'>Invalid Image (Click to open link)</text></svg>";}} />
+                      <LazyImage src={t.chartUrl} alt="Chart" style={{ width: "100%", height: "100%" }} onError={(e)=>{e.target.src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'><rect width='100%25' height='100%25' fill='%230a0a0a'/><text x='50%25' y='50%25' fill='%23555' font-family='monospace' font-size='11' text-anchor='middle' dominant-baseline='middle'>Invalid Image (Click to open link)</text></svg>";}} />
                     </a>
                     <div style={{ padding: "14px 16px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
