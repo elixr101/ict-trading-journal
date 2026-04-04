@@ -1102,7 +1102,7 @@ export default function TradingJournal() {
   });
 
   const tCols = "85px 50px 60px 48px 42px 72px 72px 65px 45px 1fr 50px 64px";
-  const navItems = [{ key: "dashboard", label: "Dashboard" }, { key: "trades", label: "Trades" }, { key: "accounts", label: "Accounts" }, { key: "montecarlo", label: "Monte Carlo" }];
+  const navItems = [{ key: "dashboard", label: "Dashboard" }, { key: "trades", label: "Trades" }, { key: "accounts", label: "Accounts" }, { key: "montecarlo", label: "Monte Carlo" }, { key: "gallery", label: "Gallery" }];
   const isAct = k => view === k || (k === "trades" && (view === "addTrade" || view === "editTrade")) || (k === "accounts" && (view === "addAccount" || view === "editAccount"));
 
   // Avatar component
@@ -1431,6 +1431,42 @@ export default function TradingJournal() {
 
           {/* MONTE CARLO */}
           {view === "montecarlo" && <MonteCarloSim trades={trades} />}
+
+          {/* GALLERY */}
+          {view === "gallery" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Trade Gallery</h2>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 16 }}>
+                {trades.filter(t => t.chartUrl).sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time)).map(t => (
+                  <div key={t.id} className="app-card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", borderRadius: 10, transition: "transform 0.2s" }} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
+                    <a href={t.chartUrl} target="_blank" rel="noopener noreferrer" style={{ display: "block", height: 160, background: "rgba(0,0,0,0.2)", position: "relative" }} title="Click to open link">
+                      <img src={t.chartUrl} alt="Chart" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e)=>{e.target.src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'><rect width='100%25' height='100%25' fill='%230a0a0a'/><text x='50%25' y='50%25' fill='%23555' font-family='monospace' font-size='11' text-anchor='middle' dominant-baseline='middle'>Invalid Image (Click to open link)</text></svg>";}} />
+                    </a>
+                    <div style={{ padding: "14px 16px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                        <span style={{ fontWeight: 800, fontSize: 16, fontFamily: "'DM Mono',monospace", color: t.pnl >= 0 ? "#4ade80" : "#f87171" }}>{t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}</span>
+                        <span style={{ fontSize: 11, color: "#fbbf24", fontWeight: 700, background: "rgba(251,191,36,0.1)", padding: "2px 6px", borderRadius: 4 }}>{t.rr || "-- R"}</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
+                        <div><div style={{ fontSize: 9, marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>Entry</div><div style={{ color: "#e2e8f0", fontWeight: 600 }}>{t.entry || "--"}</div></div>
+                        <div><div style={{ fontSize: 9, marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>Stop</div><div style={{ color: "#e2e8f0", fontWeight: 600 }}>{t.stop || "--"}</div></div>
+                        <div><div style={{ fontSize: 9, marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.05em" }}>Exit</div><div style={{ color: "#e2e8f0", fontWeight: 600 }}>{t.exit || "--"}</div></div>
+                      </div>
+                      <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.05)", fontSize: 10, color: "rgba(255,255,255,0.3)", display: "flex", justifyContent: "space-between" }}>
+                        <span>{t.date} · {t.session}</span>
+                        <span style={{ color: "#38bdf8", fontWeight: 600 }}>{t.instrument} {t.direction==="Long"?"(L)":"(S)"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {trades.filter(t => t.chartUrl).length === 0 && (
+                  <div style={{ gridColumn: "1 / -1", padding: 40, textAlign: "center", color: "rgba(255,255,255,0.2)", fontSize: 12, border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 10 }}>No screenshots found. Add Chart URLs to your trades to see them here!</div>
+                )}
+              </div>
+            </div>
+          )}
 
         </div>
       )}
