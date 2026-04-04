@@ -8,9 +8,6 @@ A "Vibe Coded", fast, and comprehensive trading journal built specifically for f
 ## 📸 Screenshots
 <img width="2559" height="1439" alt="image" src="https://github.com/user-attachments/assets/ef4de3e1-9517-4d2d-a554-7bc7c61e8caa" />
 <img width="2559" height="1439" alt="image" src="https://github.com/user-attachments/assets/4f136e95-ae50-4bb4-b213-f78eae06202b" />
-<img width="656" height="353" alt="image" src="https://github.com/user-attachments/assets/77292855-7068-4854-b93c-335479e6ba49" />
-<img width="2532" height="645" alt="image" src="https://github.com/user-attachments/assets/d30509b6-0f1d-46c9-a76f-891426f2d87e" />
-<img width="493" height="516" alt="image" src="https://github.com/user-attachments/assets/86937fbf-99a1-4c2e-a101-3132351ffda6" />
 
 ## 🚀 Overview
 This journal is designed to move far beyond basic P&L tracking. It helps traders measure their psychological state, grade their setups based on strict pre-trade rules, track specific ICT entry models, and simulate future performance using real trading data.
