@@ -946,6 +946,9 @@ export default function TradingJournal() {
   const [needsUsername, setNeedsUsername] = useState(false);
   const [customization, setCustomization] = useState({ accent: "#38bdf8", cardStyle: "glass", compactMode: false, showWelcome: true, defaultSession: "NY AM", defaultInstrument: "NQ" });
   const userMenuRef = useRef();
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeout = useRef(null);
+  const handleScroll = () => { setIsScrolling(true); if (scrollTimeout.current) clearTimeout(scrollTimeout.current); scrollTimeout.current = setTimeout(() => setIsScrolling(false), 800); };
 
   // Auth
   useEffect(() => {
@@ -1117,7 +1120,7 @@ export default function TradingJournal() {
   if (!user) return <AuthScreen />;
 
   return (
-    <div style={{ fontFamily: "'DM Mono','JetBrains Mono',monospace", background: "#000000", color: "#e2e8f0", height: "100vh", width: "100vw", display: "flex", flexDirection: "column", overflow: "hidden", position: "fixed", inset: 0 }}>
+    <div onScrollCapture={handleScroll} className={isScrolling ? "is-scrolling" : ""} style={{ fontFamily: "'DM Mono','JetBrains Mono',monospace", background: "#000000", color: "#e2e8f0", height: "100vh", width: "100vw", display: "flex", flexDirection: "column", overflow: "hidden", position: "fixed", inset: 0 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet" />
       <style>{`
         *{box-sizing:border-box}
@@ -1165,12 +1168,24 @@ export default function TradingJournal() {
         .app-card{background:var(--card-bg)!important;border:var(--card-border)!important}
         ${customization.compactMode ? ".compact-pad{padding:10px 12px!important}.compact-gap{gap:8px!important}" : ""}
         
-        /* Floating Scrollbar */
+        /* Floating Scrollbar (Smooth fade & Hover effects) */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; transition: background 0.3s; }
-        *:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
-        *:hover::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+        ::-webkit-scrollbar-track { background-color: transparent; }
+        ::-webkit-scrollbar-thumb { 
+          background-color: transparent; 
+          border-radius: 10px; 
+          transition: background-color 0.4s ease-in-out; 
+        }
+        
+        /* Shows up dimly when scrolling */
+        .is-scrolling *::-webkit-scrollbar-thumb { 
+          background-color: rgba(255,255,255,0.15); 
+        }
+        
+        /* Gets brighter/lighter when you hover directly over the scrollbar */
+        .is-scrolling *::-webkit-scrollbar-thumb:hover { 
+          background-color: rgba(255,255,255,0.35); 
+        }
       `}</style>
 
       {/* Username setup modal */}
