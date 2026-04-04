@@ -1141,7 +1141,7 @@ function PreMarketChecklist({ trades, onComplete }) {
   // Check if this session was already completed
   useEffect(() => {
     try {
-      const stored = window._preMarketSession;
+      const stored = sessionStorage.getItem("preMarketSession");
       if (stored === sessionKey) setCompletedSession(true);
     } catch(e) {}
   }, [sessionKey]);
@@ -1152,13 +1152,13 @@ function PreMarketChecklist({ trades, onComplete }) {
   const sessionLabel = currentSession === "NY_AM" ? "NY AM" : currentSession === "NY_PM" ? "NY PM" : currentSession;
 
   const handleComplete = () => {
-    try { window._preMarketSession = sessionKey; } catch(e) {}
+    try { sessionStorage.setItem("preMarketSession", sessionKey); } catch(e) {}
     setCompletedSession(true);
     if (onComplete) onComplete();
   };
 
   const handleDismiss = () => {
-    try { window._preMarketSession = sessionKey; } catch(e) {}
+    try { sessionStorage.setItem("preMarketSession", sessionKey); } catch(e) {}
     setDismissed(true);
     if (onComplete) onComplete();
   };
