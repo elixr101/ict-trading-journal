@@ -1124,13 +1124,51 @@ export default function TradingJournal() {
         html,body,#root{height:100%;width:100%;margin:0;padding:0;overflow:hidden}
         input,select,textarea,button{font-family:inherit}
         @media(max-width:640px){.hide-mobile{display:none!important}}
+        
+        /* --- SLEEK MINIMAL ANIMATIONS --- */
+        @keyframes smoothFadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Animate views smoothly on load/tab switch */
+        .animated-view {
+          animation: smoothFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Tactile buttons & pills */
+        button {
+          transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease, opacity 0.2s ease !important;
+        }
+        button:hover:not(:disabled) {
+          transform: translateY(-1px);
+          filter: brightness(1.15);
+        }
+        button:active:not(:disabled) {
+          transform: translateY(1px) scale(0.97);
+          filter: brightness(0.9);
+        }
+
+        /* Popping inputs */
+        input, select, textarea {
+          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        input:focus, select:focus, textarea:focus {
+          border-color: var(--accent, #38bdf8) !important;
+          box-shadow: 0 0 0 1px var(--accent, #38bdf8) !important;
+          background: rgba(255,255,255,0.06) !important;
+          transform: translateY(-1px);
+        }
+
         :root{--accent:${customization.accent};--card-bg:${customization.cardStyle==="solid"?"rgba(20,20,28,0.98)":customization.cardStyle==="outline"?"transparent":"rgba(255,255,255,0.025)"};--card-border:${customization.cardStyle==="outline"?"1px solid rgba(255,255,255,0.12)":"1px solid rgba(255,255,255,0.06)"}}
         .accent-text{color:var(--accent)!important}
         .app-card{background:var(--card-bg)!important;border:var(--card-border)!important}
         ${customization.compactMode ? ".compact-pad{padding:10px 12px!important}.compact-gap{gap:8px!important}" : ""}
+        
+        /* Floating Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; transition: background 0.3s; }
         *:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
         *:hover::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
       `}</style>
@@ -1212,7 +1250,7 @@ export default function TradingJournal() {
       {dbLoading ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.2)" }}>Loading data...</div>
       ) : (
-        <div style={{ padding: isMobile ? "16px" : "20px 24px", flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
+        <div key={view} className="animated-view" style={{ padding: isMobile ? "16px" : "20px 24px", flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
 
           {/* DASHBOARD */}
           {view === "dashboard" && (
