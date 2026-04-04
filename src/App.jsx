@@ -877,7 +877,7 @@ function AuthScreen() {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, height: "100vh", width: "100vw", background: "#000000", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", padding: 20, zIndex: 9999, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+    <div style={{ position: "fixed", inset: 0, height: "100%", width: "100%", background: "#000000", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", padding: 20, zIndex: 9999, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet" />
       <div style={{ width: "100%", maxWidth: 400, margin: "auto" }}>
         {/* Logo */}
