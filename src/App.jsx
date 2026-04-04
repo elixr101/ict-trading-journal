@@ -4,7 +4,9 @@ import { supabase } from "./supabaseClient";
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const INSTRUMENTS = ["NQ","ES","GC","MNQ","MES","MGC"];
 const SESSIONS = ["Asia","London","NY AM","NY Lunch","NY PM"];
-const ICT_CONCEPTS = ["FVG","OB","BOS","CHOCH","Displacement","Liquidity Sweep","Silver Bullet","ICT Killzone","Judas Swing","Turtle Soup","Breaker Block","Mitigation Block","Propulsion Block","NWOG/NDOG","IFVG","CE of Range","PD Array","SMT Divergence","Optimal Trade Entry","Market Maker Model","Power of 3","Asian Range","London Sweep","NYO Model","STDV","Volume Profile"];
+const CATEGORIZED_ICT_CONCEPTS = { "Price Action & Structure": ["BOS", "CHOCH", "MSS", "Displacement", "Liquidity Sweep", "CE of Range"], "PD Arrays & Blocks": ["FVG", "IFVG", "OB", "Breaker Block", "Mitigation Block", "Propulsion Block", "PD Array", "NWOG/NDOG"], "Advanced": ["SMT Divergence", "STDV", "Volume Profile"] };
+const ICT_CONCEPTS = Object.values(CATEGORIZED_ICT_CONCEPTS).flat();
+const DEFAULT_MODELS = ["Silver Bullet", "ICT 2022 Model", "Turtle Soup", "Judas Swing", "AMD", "NYO Model", "London Sweep", "Market Maker Model", "Optimal Trade Entry"];
 const EMOTIONS = ["Confident","Patient","Calm","Disciplined","Focused","Fearful","FOMO","Revenge","Anxious","Greedy","Frustrated","Overconfident","Hesitant"];
 const NEGATIVE_EMOTIONS = ["Fearful","FOMO","Revenge","Anxious","Greedy","Frustrated","Overconfident","Hesitant"];
 const TRADE_GRADES = ["A+","A","B","C","D","F"];
@@ -12,7 +14,6 @@ const MISTAKES = ["Moved Stop","No Confirmation","Oversized","Revenge Trade","Tr
 const FIRMS = ["Topstep","Apex","MyFundedFutures","Take Profit Trader","Lucid","Alpha Futures","Funded Next","Other"];
 const PHASES = ["Evaluation","Combine","Funded","PA (Performance Account)"];
 const TIMEFRAMES = ["1m","5m","15m","1H","4H","Daily","Weekly"];
-const DEFAULT_MODELS = ["Silver Bullet","ICT 2022 Model","Turtle Soup Reversal","AMD (Accumulation Manipulation Distribution)","NYO Killzone Entry","London Sweep + NY Continuation","Power of 3"];
 const RULE_CHECKLIST = ["Identified HTF draw on liquidity","Waited for killzone","Confirmed with LTF entry model","Risk within 1-2% of account","Set stop beyond PD array","Defined target before entry","Checked news calendar"];
 const PV = {NQ:20,ES:50,GC:100,MNQ:2,MES:5,MGC:10};
 
@@ -75,7 +76,7 @@ function Sparkline({data}){
 }
 
 // ─── CALENDAR ─────────────────────────────────────────────────────────────────
-function PnlCalendar({trades,onDayClick}){const[month,setMonth]=useState(()=>{const n=new Date();return{year:n.getFullYear(),month:n.getMonth()};});const dailyPnl=useMemo(()=>{const m={};trades.forEach(t=>{m[t.date]=(m[t.date]||0)+t.pnl;});return m;},[trades]);const dim=new Date(month.year,month.month+1,0).getDate();const fdow=new Date(month.year,month.month,1).getDay();const mn=new Date(month.year,month.month).toLocaleString("default",{month:"long",year:"numeric"});const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);return<div style={sbox}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><button onClick={()=>setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:"4px 8px"}}>‹</button><span style={{fontSize:13,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color:"#e2e8f0"}}>{mn}</span><button onClick={()=>setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:"4px 8px"}}>›</button></div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>{["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,color:"rgba(255,255,255,0.25)",fontWeight:700,padding:4}}>{d}</div>)}{cells.map((day,i)=>{if(!day)return<div key={`e${i}`}/>;const ds=`${month.year}-${String(month.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const pnl=dailyPnl[ds];const has=pnl!==undefined;const bg=!has?"transparent":pnl>0?"rgba(34,197,94,0.15)":pnl<0?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)";const col=!has?"rgba(255,255,255,0.25)":pnl>0?"#4ade80":pnl<0?"#f87171":"rgba(255,255,255,0.4)";return<div key={ds} onClick={()=>has&&onDayClick&&onDayClick(ds)} style={{textAlign:"center",borderRadius:6,padding:"6px 2px",background:bg,cursor:has?"pointer":"default"}}><div style={{fontSize:11,color:col,fontWeight:has?700:400}}>{day}</div>{has&&<div style={{fontSize:9,color:col,fontWeight:700,marginTop:1}}>${pnl>0?"+":""}{pnl.toFixed(0)}</div>}</div>;})}</div></div>;}
+function PnlCalendar({trades,onDayClick}){const[month,setMonth]=useState(()=>{const n=new Date();return{year:n.getFullYear(),month:n.getMonth()};});const dailyPnl=useMemo(()=>{const m={};trades.forEach(t=>{m[t.date]=(m[t.date]||0)+t.pnl;});return m;},[trades]);const monthlyPnl=useMemo(()=>{const prefix=`${month.year}-${String(month.month+1).padStart(2,"0")}`;let total=0;Object.entries(dailyPnl).forEach(([d,v])=>{if(d.startsWith(prefix))total+=v;});return total;},[dailyPnl,month]);const dim=new Date(month.year,month.month+1,0).getDate();const fdow=new Date(month.year,month.month,1).getDay();const mn=new Date(month.year,month.month).toLocaleString("default",{month:"long",year:"numeric"});const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);const textOutline="0 0 2px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.5)";return<div style={sbox}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}><button onClick={()=>setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:"4px 8px"}}>‹</button><span style={{fontSize:13,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color:"#e2e8f0"}}>{mn}</span><button onClick={()=>setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:"4px 8px"}}>›</button></div><div style={{textAlign:"center",marginBottom:12,fontSize:15,fontWeight:800,fontFamily:"'DM Mono',monospace",color:monthlyPnl>=0?"#4ade80":"#f87171"}}>Monthly P&L: ${monthlyPnl>=0?"+":""}{monthlyPnl.toFixed(2)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>{["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,color:"rgba(255,255,255,0.25)",fontWeight:700,padding:4}}>{d}</div>)}{cells.map((day,i)=>{if(!day)return<div key={`e${i}`}/>;const ds=`${month.year}-${String(month.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const pnl=dailyPnl[ds];const has=pnl!==undefined;const bg=!has?"transparent":pnl>0?"rgba(34,197,94,0.15)":pnl<0?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)";const col=!has?"rgba(255,255,255,0.25)":pnl>0?"#4ade80":pnl<0?"#f87171":"rgba(255,255,255,0.4)";return<div key={ds} onClick={()=>has&&onDayClick&&onDayClick(ds)} style={{textAlign:"center",borderRadius:6,padding:"6px 2px",background:bg,cursor:has?"pointer":"default"}}><div style={{fontSize:13,color:col,fontWeight:has?700:400,textShadow:textOutline}}>{day}</div>{has&&<div style={{fontSize:11,color:col,fontWeight:700,marginTop:1,textShadow:textOutline}}>${pnl>0?"+":""}{pnl.toFixed(0)}</div>}</div>;})}</div></div>;}
 
 // ─── INTERACTIVE EQUITY CURVE ────────────────────────────────────────────────
 function EquityCurve({ trades }) {
@@ -85,12 +86,12 @@ function EquityCurve({ trades }) {
   const [zoom, setZoom] = useState({ scale: 1, offsetX: 0 });
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
-  const [dims, setDims] = useState({ w: 400, h: 180 });
+  const [dims, setDims] = useState({ w: 400, h: 220 });
 
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
       const e = entries[0];
-      if (e) setDims({ w: e.contentRect.width || 400, h: 180 });
+      if (e) setDims({ w: e.contentRect.width || 400, h: Math.max(160, e.contentRect.height || 220) });
     });
     if (containerRef.current) obs.observe(containerRef.current);
     return () => obs.disconnect();
@@ -109,14 +110,30 @@ function EquityCurve({ trades }) {
     return { cumPnl, labels };
   }, [sorted]);
 
-  if (cumPnl.length < 2) return <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades</div>;
+  const totalPts = cumPnl.length;
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const delta = e.deltaY > 0 ? 0.85 : 1.18;
+    setZoom(z => {
+      const newScale = Math.max(1, Math.min(totalPts / 2, z.scale * delta));
+      return { ...z, scale: newScale };
+    });
+  }, [totalPts]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
+
+  if (cumPnl.length < 2) return <div style={{ height: "100%", minHeight: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades</div>;
 
   const maxVal = Math.max(...cumPnl, 0);
   const minVal = Math.min(...cumPnl, 0);
   const valRange = maxVal - minVal || 1;
 
-  // Zoom-clamped visible range
-  const totalPts = cumPnl.length;
   const visibleCount = Math.max(2, Math.floor(totalPts / zoom.scale));
   const maxOffset = totalPts - visibleCount;
   const startIdx = Math.max(0, Math.min(maxOffset, Math.round(zoom.offsetX)));
@@ -135,7 +152,6 @@ function EquityCurve({ trades }) {
   const points = visPts.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
   const color = visPts[visPts.length - 1] >= 0 ? "#4ade80" : "#f87171";
 
-  // Y axis ticks
   const yTicks = [];
   const tickCount = 5;
   for (let i = 0; i <= tickCount; i++) {
@@ -143,7 +159,6 @@ function EquityCurve({ trades }) {
     yTicks.push({ y: toY(val), label: `$${val >= 0 ? "+" : ""}${val.toFixed(0)}` });
   }
 
-  // X axis ticks — show ~4 labels
   const xTicks = [];
   const xStep = Math.max(1, Math.floor((visPts.length - 1) / 4));
   for (let i = 0; i < visPts.length; i += xStep) {
@@ -168,17 +183,8 @@ function EquityCurve({ trades }) {
     }
   };
 
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.85 : 1.18;
-    setZoom(z => {
-      const newScale = Math.max(1, Math.min(totalPts / 2, z.scale * delta));
-      return { ...z, scale: newScale };
-    });
-  };
-
   return (
-    <div ref={containerRef} style={{ position: "relative", userSelect: "none" }}
+    <div ref={containerRef} style={{ position: "relative", userSelect: "none", width: "100%", height: "100%" }}
       onMouseLeave={() => { setTooltip(null); setDragging(false); }}
       onMouseUp={() => setDragging(false)}
     >
@@ -192,14 +198,10 @@ function EquityCurve({ trades }) {
         style={{ cursor: dragging ? "grabbing" : "crosshair", display: "block" }}
         onMouseMove={handleMouseMove}
         onMouseDown={e => { setDragging(true); setDragStart({ x: e.clientX, offset: zoom.offsetX }); }}
-        onWheel={handleWheel}
       >
         <g transform={`translate(${PAD.left},${PAD.top})`}>
-          {/* Grid lines */}
           {yTicks.map((t, i) => <line key={i} x1={0} y1={t.y} x2={W} y2={t.y} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />)}
-          {/* Zero line */}
           <line x1={0} y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="4,4" />
-          {/* Area fill */}
           <defs>
             <linearGradient id="ecGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity="0.2" />
@@ -208,21 +210,15 @@ function EquityCurve({ trades }) {
             <clipPath id="ecClip"><rect x="0" y="0" width={W} height={H} /></clipPath>
           </defs>
           <polygon fill="url(#ecGrad)" clipPath="url(#ecClip)" points={`0,${zeroY} ${points} ${W},${zeroY}`} />
-          {/* Line */}
           <polyline fill="none" stroke={color} strokeWidth="2" points={points} strokeLinecap="round" strokeLinejoin="round" clipPath="url(#ecClip)" />
-          {/* Hover dot */}
           {tooltip && (() => {
             const localIdx = tooltip.idx - startIdx;
             if (localIdx < 0 || localIdx >= visPts.length) return null;
             return <circle cx={toX(localIdx)} cy={toY(visPts[localIdx])} r={4} fill={color} stroke="#0a0a0a" strokeWidth={2} />;
           })()}
-          {/* Y axis labels */}
           {yTicks.map((t, i) => <text key={i} x={-6} y={t.y + 4} textAnchor="end" fontSize={9} fill="rgba(255,255,255,0.3)" fontFamily="'DM Mono',monospace">{t.label}</text>)}
-          {/* X axis labels */}
           {xTicks.map((t, i) => <text key={i} x={t.x} y={H + 20} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.3)" fontFamily="'DM Mono',monospace">{t.label}</text>)}
-          {/* Y axis line */}
           <line x1={0} y1={0} x2={0} y2={H} stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
-          {/* X axis line */}
           <line x1={0} y1={H} x2={W} y2={H} stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
         </g>
       </svg>
@@ -443,11 +439,12 @@ function MonteCarloSim({ trades }) {
           <div style={sbox}>
             <div style={{ ...ulbl, marginBottom: 12 }}>Parameters</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 10 }}>
-              <Input label="Simulations" type="number" value={simCount} onChange={e => setSC(Math.max(100, +e.target.value))} />
-              <Input label="Trades/Sim" type="number" value={tradeCount} onChange={e => setTC(Math.max(10, +e.target.value))} />
+              <Input label="Simulations" type="number" value={simCount} onChange={e => { let v = +e.target.value; if (v > 10000) v = 10000; setSC(Math.max(100, v)); }} />
+              <Input label="Trades/Sim" type="number" value={tradeCount} onChange={e => { let v = +e.target.value; if (v > 500) v = 500; setTC(Math.max(10, v)); }} />
               <Input label="Start Bal" type="number" value={startBal} onChange={e => setSB(+e.target.value)} />
               <Input label="Max DD" type="number" value={maxDD} onChange={e => setMD(+e.target.value)} />
             </div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 4 }}>Max: 10,000 simulations · 500 trades/sim</div>
             <div style={{ marginTop: 14 }}>
               <Btn variant="primary" onClick={runSim} style={{ opacity: running ? 0.5 : 1 }}>{running ? "Running..." : "Run Simulation"}</Btn>
             </div>
@@ -514,7 +511,13 @@ function MonteCarloSim({ trades }) {
 }
 
 // ─── TRADE FORM ───────────────────────────────────────────────────────────────
-function TradeForm({trade,accounts,customModels,customConcepts,onSave,onCancel,onAddModel,onAddConcept,defaultSession,defaultInstrument}){const{isMobile}=useIsMobile();const[form,setForm]=useState(trade||{id:"",date:new Date().toISOString().slice(0,10),time:"",instrument:defaultInstrument||"NQ",session:defaultSession||"NY AM",direction:"Long",contracts:1,entry:"",stop:"",target:"",exit:"",pnl:0,ictConcepts:[],emotions:["Calm"],grade:"B",accountId:"",notes:"",rr:"",partials:"",preTradeNarrative:"",postTradeReview:"",htfBias:"",ltfEntry:"",confluenceScore:0,mistakes:[],rulesFollowed:[],drawOnLiquidity:"",entryModel:"",chartUrl:""});const[nc,setNC]=useState("");const set=(k,v)=>setForm(f=>({...f,[k]:v}));const allC=[...ICT_CONCEPTS,...(customConcepts||[])];const allM=[...DEFAULT_MODELS,...(customModels||[])];useEffect(()=>{if(form.emotion&&!form.emotions)setForm(f=>({...f,emotions:[f.emotion]}));},[]);useEffect(()=>{const rr=calcRR(form.entry,form.stop,form.exit,form.direction);const pnl=calcPnl(form.entry,form.exit,form.contracts,form.instrument,form.direction);setForm(f=>({...f,rr:rr||f.rr,pnl:form.exit?pnl:f.pnl}));},[form.entry,form.stop,form.exit,form.contracts,form.instrument,form.direction]);const ems=form.emotions||[];useEffect(()=>{const rP=RULE_CHECKLIST.length>0?(form.rulesFollowed.length/RULE_CHECKLIST.length)*3.0:0;const iP=form.ictConcepts.length===0?0:Math.min(2.0,0.7*Math.sqrt(form.ictConcepts.length));let nP=0;if(form.htfBias)nP+=0.4;if(form.ltfEntry)nP+=0.3;if((form.drawOnLiquidity||"").length>3)nP+=0.3;if((form.entryModel||"").length>3)nP+=0.3;if((form.preTradeNarrative||"").length>20)nP+=0.4;const es=form.emotions||[];const pC=es.filter(e=>!NEGATIVE_EMOTIONS.includes(e)).length;const nC=es.filter(e=>NEGATIVE_EMOTIONS.includes(e)).length;const eB=Math.min(1.5,pC*0.5);const eP=nC*0.8;const mP=(pC>0&&nC>0)?0.3:0;const gM={"A+":1.5,"A":1.2,"B":0.8,"C":0.4,"D":0.1,"F":0};const sub=rP+iP+nP+eB+(gM[form.grade]||0);set("confluenceScore",Math.max(0,Math.min(10,Math.round((sub-form.mistakes.length*1.5-eP-mP)*10)/10)));},[form.ictConcepts,form.rulesFollowed,form.mistakes,form.htfBias,form.ltfEntry,form.drawOnLiquidity,form.entryModel,form.preTradeNarrative,form.emotions,form.grade]);const toggle=(k,v)=>setForm(f=>({...f,[k]:f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]}));const toggleEmo=e=>setForm(f=>{const c=f.emotions||[];return{...f,emotions:c.includes(e)?c.filter(x=>x!==e):[...c,e]};});const sec=t=><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:700,marginTop:8,marginBottom:4,borderTop:"1px solid rgba(255,255,255,0.05)",paddingTop:14}}>{t}</div>;const g=isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr";return<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Date" type="date" value={form.date} onChange={e=>set("date",e.target.value)}/><Input label="Time" type="time" value={form.time} onChange={e=>set("time",e.target.value)}/><Select label="Instrument" value={form.instrument} onChange={e=>set("instrument",e.target.value)} options={INSTRUMENTS}/><Select label="Session" value={form.session} onChange={e=>set("session",e.target.value)} options={SESSIONS}/></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr 1fr",gap:10}}><Select label="Direction" value={form.direction} onChange={e=>set("direction",e.target.value)} options={["Long","Short"]}/><Input label="Contracts" type="number" value={form.contracts} onChange={e=>set("contracts",+e.target.value)}/><Input label="Entry" type="number" step="any" value={form.entry} onChange={e=>set("entry",e.target.value)}/><Input label="Stop" type="number" step="any" value={form.stop} onChange={e=>set("stop",e.target.value)}/><Input label="Target" type="number" step="any" value={form.target} onChange={e=>set("target",e.target.value)}/></div><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Exit" type="number" step="any" value={form.exit} onChange={e=>set("exit",e.target.value)}/><Input label="P&L (auto)" type="number" step="any" value={form.pnl} onChange={e=>set("pnl",+e.target.value)}/><Input label="R:R (auto)" value={form.rr} onChange={e=>set("rr",e.target.value)}/><Select label="Grade" value={form.grade} onChange={e=>set("grade",e.target.value)} options={TRADE_GRADES}/></div><Select label="Account" value={form.accountId} onChange={e=>set("accountId",e.target.value)} options={[{value:"",label:"-- No Account --"},...accounts.map(a=>({value:a.id,label:`${a.name} (${a.firm} $${a.currentBalance.toLocaleString()})`}))]}/><Input label="Chart URL" value={form.chartUrl||""} onChange={e=>set("chartUrl",e.target.value)} placeholder="https://tradingview.com/x/..."/>{sec("Bias & Model")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}><Select label="HTF Bias" value={form.htfBias} onChange={e=>set("htfBias",e.target.value)} options={["","Bullish","Bearish","Neutral/Ranging"]}/><Select label="LTF TF" value={form.ltfEntry} onChange={e=>set("ltfEntry",e.target.value)} options={["",...TIMEFRAMES]}/><Input label="Draw on Liquidity" value={form.drawOnLiquidity} onChange={e=>set("drawOnLiquidity",e.target.value)} placeholder="BSL above PDH"/></div><div><label style={{...ulbl,display:"block",marginBottom:6}}>Entry Model</label><div style={{display:"flex",flexWrap:"wrap",marginBottom:6}}>{allM.map(m=><Pill key={m} label={m} active={form.entryModel===m} onClick={()=>set("entryModel",m)} color="rgba(56,189,248,0.18)"/>)}</div><div style={{display:"flex",gap:6}}><input value={form.entryModel} onChange={e=>set("entryModel",e.target.value)} placeholder="Or type custom..." style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{form.entryModel&&!allM.includes(form.entryModel)&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>onAddModel(form.entryModel.trim())}>+ Save</Btn>}</div></div>{sec("Pre-Trade Rules")}<div style={{display:"flex",flexWrap:"wrap",gap:3}}>{RULE_CHECKLIST.map(r=><Pill key={r} label={r} active={form.rulesFollowed.includes(r)} onClick={()=>toggle("rulesFollowed",r)} color="rgba(34,197,94,0.18)"/>)}</div>{sec("Psychology")}<div><label style={{...ulbl,display:"block",marginBottom:4}}>Emotions <span style={{fontWeight:400,textTransform:"none",color:"rgba(255,255,255,0.2)"}}>(multi)</span></label><div style={{display:"flex",flexWrap:"wrap"}}>{EMOTIONS.map(e=><Pill key={e} label={e} active={ems.includes(e)} onClick={()=>toggleEmo(e)} color={NEGATIVE_EMOTIONS.includes(e)?"rgba(239,68,68,0.18)":"rgba(34,197,94,0.18)"}/>)}</div></div><div><label style={{...ulbl,display:"block",marginBottom:6}}>Mistakes</label><div style={{display:"flex",flexWrap:"wrap"}}>{MISTAKES.map(m=><Pill key={m} label={m} active={form.mistakes.includes(m)} onClick={()=>toggle("mistakes",m)} color="rgba(239,68,68,0.18)"/>)}</div></div>{sec("ICT Concepts")}<div style={{display:"flex",flexWrap:"wrap"}}>{allC.map(c=><Pill key={c} label={c} active={form.ictConcepts.includes(c)} onClick={()=>toggle("ictConcepts",c)} color="rgba(168,85,247,0.18)"/>)}</div><div style={{display:"flex",gap:6}}><input value={nc} onChange={e=>setNC(e.target.value)} placeholder="Add custom concept..." onKeyDown={e=>{if(e.key==="Enter"&&nc.trim()&&!allC.includes(nc.trim())){onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{nc.trim()&&!allC.includes(nc.trim())&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>{onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}>+ Save</Btn>}</div><div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"rgba(255,255,255,0.025)",borderRadius:8,border:"1px solid rgba(255,255,255,0.05)"}}><span style={ulbl}>Confluence</span><div style={{display:"flex",gap:3}}>{Array.from({length:10}).map((_,i)=>{const fill=Math.min(1,Math.max(0,form.confluenceScore-i));const bc=form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":"#f87171";return<div key={i} style={{width:18,height:8,borderRadius:2,background:fill>=1?bc:fill>0?`linear-gradient(90deg,${bc} ${fill*100}%,rgba(255,255,255,0.06) ${fill*100}%)`:"rgba(255,255,255,0.06)"}}/>;})}</div><span style={{fontSize:14,fontWeight:800,fontFamily:"'DM Mono',monospace",color:form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":form.confluenceScore>0?"#f87171":"#e2e8f0"}}>{form.confluenceScore}/10</span></div>{sec("Narrative")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}><TextArea label="Pre-Trade" value={form.preTradeNarrative} onChange={e=>set("preTradeNarrative",e.target.value)} placeholder="HTF bias? DOL?"/><TextArea label="Post-Trade" value={form.postTradeReview} onChange={e=>set("postTradeReview",e.target.value)} placeholder="What happened?"/></div><TextArea label="Partials" value={form.partials} onChange={e=>set("partials",e.target.value)} placeholder="TP1 at 1:1..."/><TextArea label="Notes" value={form.notes} onChange={e=>set("notes",e.target.value)}/><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn variant="ghost" onClick={onCancel}>Cancel</Btn><Btn variant="primary" onClick={()=>onSave(form)}>Save Trade</Btn></div></div>;}
+function TradeForm({trade,accounts,customModels,customConcepts,onSave,onCancel,onAddModel,onAddConcept,defaultSession,defaultInstrument}){const{isMobile}=useIsMobile();const[form,setForm]=useState(trade||{id:"",date:new Date().toISOString().slice(0,10),time:"",instrument:defaultInstrument||"NQ",session:defaultSession||"NY AM",direction:"Long",contracts:1,entry:"",stop:"",target:"",exit:"",pnl:0,ictConcepts:[],emotions:["Calm"],grade:"B",accountId:"",notes:"",rr:"",partials:"",preTradeNarrative:"",postTradeReview:"",htfBias:"",ltfEntry:"",confluenceScore:0,mistakes:[],rulesFollowed:[],drawOnLiquidity:"",entryModel:"",chartUrl:""});const[nc,setNC]=useState("");const set=(k,v)=>setForm(f=>({...f,[k]:v}));const allC=[...ICT_CONCEPTS,...(customConcepts||[])];const allM=[...DEFAULT_MODELS,...(customModels||[])];useEffect(()=>{if(form.emotion&&!form.emotions)setForm(f=>({...f,emotions:[f.emotion]}));},[]);
+
+// Auto-detect session from trade time (updates whenever time changes)
+const detectSession=(time)=>{if(!time)return null;const[h,m]=(time).split(":").map(Number);const mins=h*60+(m||0);if(mins>=1200||mins<60)return"Asia";if(mins>=120&&mins<=300)return"London";if(mins>=420&&mins<=660)return"NY AM";if(mins>=720&&mins<=780)return"NY Lunch";if(mins>=810&&mins<=960)return"NY PM";return null;};
+useEffect(()=>{if(form.time){const detected=detectSession(form.time);if(detected)setForm(f=>({...f,session:detected}));}},[form.time]);
+
+useEffect(()=>{const rr=calcRR(form.entry,form.stop,form.exit,form.direction);const pnl=calcPnl(form.entry,form.exit,form.contracts,form.instrument,form.direction);setForm(f=>({...f,rr:rr||f.rr,pnl:form.exit?pnl:f.pnl}));},[form.entry,form.stop,form.exit,form.contracts,form.instrument,form.direction]);const ems=form.emotions||[];useEffect(()=>{const rP=RULE_CHECKLIST.length>0?(form.rulesFollowed.length/RULE_CHECKLIST.length)*3.0:0;const iP=form.ictConcepts.length===0?0:Math.min(2.0,0.7*Math.sqrt(form.ictConcepts.length));let nP=0;if(form.htfBias)nP+=0.4;if(form.ltfEntry)nP+=0.3;if((form.drawOnLiquidity||"").length>3)nP+=0.3;if((form.entryModel||"").length>3)nP+=0.3;if((form.preTradeNarrative||"").length>20)nP+=0.4;const es=form.emotions||[];const pC=es.filter(e=>!NEGATIVE_EMOTIONS.includes(e)).length;const nC=es.filter(e=>NEGATIVE_EMOTIONS.includes(e)).length;const eB=Math.min(1.5,pC*0.5);const eP=nC*0.8;const mP=(pC>0&&nC>0)?0.3:0;const gM={"A+":1.5,"A":1.2,"B":0.8,"C":0.4,"D":0.1,"F":0};const sub=rP+iP+nP+eB+(gM[form.grade]||0);set("confluenceScore",Math.max(0,Math.min(10,Math.round((sub-form.mistakes.length*1.5-eP-mP)*10)/10)));},[form.ictConcepts,form.rulesFollowed,form.mistakes,form.htfBias,form.ltfEntry,form.drawOnLiquidity,form.entryModel,form.preTradeNarrative,form.emotions,form.grade]);const toggle=(k,v)=>setForm(f=>({...f,[k]:f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]}));const toggleEmo=e=>setForm(f=>{const c=f.emotions||[];return{...f,emotions:c.includes(e)?c.filter(x=>x!==e):[...c,e]};});const sec=t=><div style={{fontSize:11,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:700,marginTop:8,marginBottom:4,borderTop:"1px solid rgba(255,255,255,0.05)",paddingTop:14}}>{t}</div>;const g=isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr";return<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Date" type="date" value={form.date} onChange={e=>set("date",e.target.value)}/><Input label="Time" type="time" value={form.time} onChange={e=>set("time",e.target.value)}/><Select label="Instrument" value={form.instrument} onChange={e=>set("instrument",e.target.value)} options={INSTRUMENTS}/><Select label="Session (Auto)" value={form.session} onChange={e=>set("session",e.target.value)} options={SESSIONS} disabled={true} style={{opacity: 0.5, pointerEvents: "none", backgroundColor: "rgba(0,0,0,0.2)"}}/></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr 1fr",gap:10}}><Select label="Direction" value={form.direction} onChange={e=>set("direction",e.target.value)} options={["Long","Short"]}/><Input label="Contracts" type="number" value={form.contracts} onChange={e=>set("contracts",+e.target.value)}/><Input label="Entry" type="number" step="any" value={form.entry} onChange={e=>set("entry",e.target.value)}/><Input label="Stop" type="number" step="any" value={form.stop} onChange={e=>set("stop",e.target.value)}/><Input label="Target" type="number" step="any" value={form.target} onChange={e=>set("target",e.target.value)}/></div><div style={{display:"grid",gridTemplateColumns:g,gap:10}}><Input label="Exit" type="number" step="any" value={form.exit} onChange={e=>set("exit",e.target.value)}/><Input label="P&L (auto)" type="number" step="any" value={form.pnl} onChange={e=>set("pnl",+e.target.value)}/><Input label="R:R (auto)" value={form.rr} onChange={e=>set("rr",e.target.value)}/><Select label="Grade" value={form.grade} onChange={e=>set("grade",e.target.value)} options={TRADE_GRADES}/></div><Select label="Account" value={form.accountId} onChange={e=>set("accountId",e.target.value)} options={[{value:"",label:"-- No Account --"},...accounts.map(a=>({value:a.id,label:`${a.name} (${a.firm} $${a.currentBalance.toLocaleString()})`}))]}/><Input label="Chart URL" value={form.chartUrl||""} onChange={e=>set("chartUrl",e.target.value)} placeholder="https://tradingview.com/x/..."/>{sec("Pre-Trade Rules")}<div style={{display:"flex",flexWrap:"wrap",gap:3,justifyContent:"center"}}>{RULE_CHECKLIST.map(r=><Pill key={r} label={r} active={form.rulesFollowed.includes(r)} onClick={()=>toggle("rulesFollowed",r)} color="rgba(34,197,94,0.18)"/>)}</div>{sec("Psychology")}<div><label style={{...ulbl,display:"block",marginBottom:4,textAlign:"center"}}>Emotions <span style={{fontWeight:400,textTransform:"none",color:"rgba(255,255,255,0.2)"}}>(multi)</span></label><div style={{display:"flex",flexWrap:"wrap",justifyContent:"center"}}>{EMOTIONS.map(e=><Pill key={e} label={e} active={ems.includes(e)} onClick={()=>toggleEmo(e)} color={NEGATIVE_EMOTIONS.includes(e)?"rgba(239,68,68,0.18)":"rgba(34,197,94,0.18)"}/>)}</div></div><div><label style={{...ulbl,display:"block",marginBottom:6,textAlign:"center"}}>Mistakes</label><div style={{display:"flex",flexWrap:"wrap",justifyContent:"center"}}>{MISTAKES.map(m=><Pill key={m} label={m} active={form.mistakes.includes(m)} onClick={()=>toggle("mistakes",m)} color="rgba(239,68,68,0.18)"/>)}</div></div>{sec("Bias & Model")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}><Select label="HTF Bias" value={form.htfBias} onChange={e=>set("htfBias",e.target.value)} options={["","Bullish","Bearish","Neutral/Ranging"]}/><Select label="LTF TF" value={form.ltfEntry} onChange={e=>set("ltfEntry",e.target.value)} options={["",...TIMEFRAMES]}/><Input label="Draw on Liquidity" value={form.drawOnLiquidity} onChange={e=>set("drawOnLiquidity",e.target.value)} placeholder="BSL above PDH"/></div><div><label style={{...ulbl,display:"block",marginBottom:6,textAlign:"center"}}>Entry Model</label><div style={{display:"flex",flexWrap:"wrap",marginBottom:6,justifyContent:"center"}}>{allM.map(m=><Pill key={m} label={m} active={form.entryModel===m} onClick={()=>set("entryModel",m)} color="rgba(56,189,248,0.18)"/>)}</div><div style={{display:"flex",gap:6}}><input value={form.entryModel} onChange={e=>set("entryModel",e.target.value)} placeholder="Or type custom..." style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{form.entryModel&&!allM.includes(form.entryModel)&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>onAddModel(form.entryModel.trim())}>+ Save</Btn>}</div></div>{sec("ICT Concepts")}<div style={{display:"flex",flexDirection:"column",gap:14}}>{Object.entries(CATEGORIZED_ICT_CONCEPTS).map(([cat,concepts])=><div key={cat}><div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",textAlign:"center",marginBottom:6,fontWeight:700}}>{cat}</div><div style={{display:"flex",flexWrap:"wrap",justifyContent:"center"}}>{concepts.map(c=><Pill key={c} label={c} active={form.ictConcepts.includes(c)} onClick={()=>toggle("ictConcepts",c)} color="rgba(168,85,247,0.18)"/>)}</div></div>)}{customConcepts&&customConcepts.length>0&&(<div><div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",textAlign:"center",marginBottom:6,fontWeight:700}}>CUSTOM</div><div style={{display:"flex",flexWrap:"wrap",justifyContent:"center"}}>{customConcepts.map(c=><Pill key={c} label={c} active={form.ictConcepts.includes(c)} onClick={()=>toggle("ictConcepts",c)} color="rgba(168,85,247,0.18)"/>)}</div></div>)}</div><div style={{display:"flex",gap:6}}><input value={nc} onChange={e=>setNC(e.target.value)} placeholder="Add custom concept..." onKeyDown={e=>{if(e.key==="Enter"&&nc.trim()&&!allC.includes(nc.trim())){onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}} style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:7,padding:"8px 11px",color:"#e2e8f0",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}}/>{nc.trim()&&!allC.includes(nc.trim())&&<Btn variant="success" style={{padding:"7px 12px",fontSize:10}} onClick={()=>{onAddConcept(nc.trim());toggle("ictConcepts",nc.trim());setNC("");}}>+ Save</Btn>}</div><div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"rgba(255,255,255,0.025)",borderRadius:8,border:"1px solid rgba(255,255,255,0.05)"}}><span style={ulbl}>Confluence</span><div style={{display:"flex",gap:3}}>{Array.from({length:10}).map((_,i)=>{const fill=Math.min(1,Math.max(0,form.confluenceScore-i));const bc=form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":"#f87171";return<div key={i} style={{width:18,height:8,borderRadius:2,background:fill>=1?bc:fill>0?`linear-gradient(90deg,${bc} ${fill*100}%,rgba(255,255,255,0.06) ${fill*100}%)`:"rgba(255,255,255,0.06)"}}/>;})}</div><span style={{fontSize:14,fontWeight:800,fontFamily:"'DM Mono',monospace",color:form.confluenceScore>=7?"#4ade80":form.confluenceScore>=4?"#fbbf24":form.confluenceScore>0?"#f87171":"#e2e8f0"}}>{form.confluenceScore}/10</span></div>{sec("Narrative")}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}><TextArea label="Pre-Trade" value={form.preTradeNarrative} onChange={e=>set("preTradeNarrative",e.target.value)} placeholder="HTF bias? DOL?"/><TextArea label="Post-Trade" value={form.postTradeReview} onChange={e=>set("postTradeReview",e.target.value)} placeholder="What happened?"/></div><TextArea label="Partials" value={form.partials} onChange={e=>set("partials",e.target.value)} placeholder="TP1 at 1:1..."/><TextArea label="Notes" value={form.notes} onChange={e=>set("notes",e.target.value)}/><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}><Btn variant="ghost" onClick={onCancel}>Cancel</Btn><Btn variant="primary" onClick={()=>onSave(form)}>Save Trade</Btn></div></div>;}
 
 // ─── ACCOUNT FORM ─────────────────────────────────────────────────────────────
 function AccountForm({account,onSave,onCancel}){const{isMobile}=useIsMobile();const[form,setForm]=useState(account||{id:"",name:"",firm:"",size:0,maxLoss:0,dailyLoss:0,profitTarget:0,currentBalance:0,phase:"Evaluation",status:"Active",balanceHistory:[]});const set=(k,v)=>setForm(f=>({...f,[k]:v}));return<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}><Input label="Account Name" value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. Apex 50K #1"/><Select label="Firm" value={form.firm} onChange={e=>set("firm",e.target.value)} options={FIRMS}/><Select label="Phase" value={form.phase} onChange={e=>set("phase",e.target.value)} options={PHASES}/><Select label="Status" value={form.status} onChange={e=>set("status",e.target.value)} options={["Active","Breached","Passed","Payout"]}/><Input label="Account Size ($)" type="number" value={form.size} onChange={e=>set("size",+e.target.value)}/><Input label="Current Balance ($)" type="number" value={form.currentBalance} onChange={e=>set("currentBalance",+e.target.value)}/><Input label="Max DD ($)" type="number" value={form.maxLoss} onChange={e=>set("maxLoss",+e.target.value)}/><Input label="Daily Limit ($)" type="number" value={form.dailyLoss} onChange={e=>set("dailyLoss",+e.target.value)}/><Input label="Profit Target ($)" type="number" value={form.profitTarget} onChange={e=>set("profitTarget",+e.target.value)}/></div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn variant="ghost" onClick={onCancel}>Cancel</Btn><Btn variant="primary" onClick={()=>onSave(form)}>Save</Btn></div></div>;}
@@ -638,31 +641,26 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
           {/* ── PROFILE TAB ── */}
           {tab === "profile" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* Avatar preview */}
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <div style={{ width: 64, height: 64, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
+              {/* Avatar preview - centered, clickable for upload */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => uploadAvatar(e.target.files?.[0])} />
+                <div onClick={() => fileRef.current?.click()} style={{ width: 96, height: 96, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 800, color: "#fff", flexShrink: 0, cursor: "pointer", position: "relative" }} title="Click to upload photo"
+                  onMouseEnter={e => { e.currentTarget.querySelector('.av-overlay').style.opacity = 1; }}
+                  onMouseLeave={e => { e.currentTarget.querySelector('.av-overlay').style.opacity = 0; }}
+                >
                   {avUrl ? <img src={avUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvUrl("")} /> : (uname?.[0] || user?.email?.[0] || "?").toUpperCase()}
+                  <div className="av-overlay" style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.2s", borderRadius: "50%" }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span style={{ fontSize: 10, color: "#fff", fontWeight: 600, marginTop: 4 }}>Upload</span>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{uname || user?.email}</div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{uname || user?.email}</div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{user?.email}</div>
                 </div>
               </div>
 
               <Input label="Username" value={uname} onChange={e => setUname(e.target.value)} placeholder="your_username" />
-
-              <div>
-                <label style={{ ...ulbl, display: "block", marginBottom: 6 }}>Profile Picture</label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => uploadAvatar(e.target.files?.[0])} />
-                  <Btn variant="ghost" style={{ fontSize: 11, padding: "7px 12px" }} onClick={() => fileRef.current?.click()}>Upload Image</Btn>
-                  <span style={{ color: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", fontSize: 11 }}>or</span>
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <Input label="Avatar URL" value={avUrl} onChange={e => setAvUrl(e.target.value)} placeholder="https://..." />
-                </div>
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 4 }}>Upload requires 'avatars' bucket in Supabase Storage (public access)</div>
-              </div>
 
               {saveMsg && <div style={{ fontSize: 12, color: saveMsg.includes("Error") || saveMsg.includes("error") ? "#f87171" : "#4ade80", background: saveMsg.includes("Error") || saveMsg.includes("error") ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)", padding: "8px 12px", borderRadius: 6 }}>{saveMsg}</div>}
               <Btn variant="primary" onClick={saveProfile} style={{ opacity: saving ? 0.6 : 1 }}>{saving ? "Saving..." : "Save Profile"}</Btn>
@@ -678,7 +676,7 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
               <div style={{ ...sbox }}>
                 <div style={{ ...ulbl, marginBottom: 10 }}>Import</div>
                 <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 12, margin: "0 0 12px" }}>Import your trades from a previously exported file. Existing trades are kept.</p>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                   <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => handleImportJSON(e.target.files?.[0])} />
                   <input ref={csvRef} type="file" accept=".csv" style={{ display: "none" }} onChange={e => handleImportCSV(e.target.files?.[0])} />
                   <Btn variant="ghost" style={{ fontSize: 11, padding: "8px 14px", opacity: importing ? 0.5 : 1 }} onClick={() => fileRef.current?.click()}>📂 Import JSON</Btn>
@@ -691,7 +689,7 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
               <div style={{ ...sbox }}>
                 <div style={{ ...ulbl, marginBottom: 10 }}>Export</div>
                 <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "0 0 12px" }}>Download a backup of all your journal data.</p>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                   <Btn variant="success" style={{ fontSize: 11, padding: "8px 14px" }} onClick={() => exportJSON(trades, accounts, customModels, customConcepts)}>⬇ Export JSON</Btn>
                   <Btn variant="success" style={{ fontSize: 11, padding: "8px 14px" }} onClick={() => exportCSV(trades)}>⬇ Export CSV</Btn>
                 </div>
@@ -877,7 +875,7 @@ function AuthScreen() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", padding: 20 }}>
+    <div style={{ position: "fixed", inset: 0, height: "100vh", width: "100vw", background: "#000000", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", padding: 20, zIndex: 9999 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet" />
       <div style={{ width: "100%", maxWidth: 400 }}>
         {/* Logo */}
@@ -887,7 +885,7 @@ function AuthScreen() {
           <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, margin: 0 }}>Futures · Prop Firm Tracker</p>
         </div>
 
-        <div style={{ ...sbox, padding: 28 }}>
+        <div style={{ padding: 28 }}>
           {/* Tab toggle */}
           <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
             {["login", "signup"].map(m => (
@@ -1115,11 +1113,11 @@ export default function TradingJournal() {
     </div>
   );
 
-  if (authLoading) return <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.3)", fontFamily: "'DM Mono',monospace" }}>Loading...</div>;
+  if (authLoading) return <div style={{ position: "fixed", inset: 0, height: "100vh", width: "100vw", background: "#000000", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.3)", fontFamily: "'DM Mono',monospace", zIndex: 9999 }}>Loading...</div>;
   if (!user) return <AuthScreen />;
 
   return (
-    <div style={{ fontFamily: "'DM Mono','JetBrains Mono',monospace", background: "#0a0a0a", color: "#e2e8f0", height: "100vh", width: "100vw", display: "flex", flexDirection: "column", overflow: "hidden", position: "fixed", inset: 0 }}>
+    <div style={{ fontFamily: "'DM Mono','JetBrains Mono',monospace", background: "#000000", color: "#e2e8f0", height: "100vh", width: "100vw", display: "flex", flexDirection: "column", overflow: "hidden", position: "fixed", inset: 0 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet" />
       <style>{`
         *{box-sizing:border-box}
@@ -1130,6 +1128,11 @@ export default function TradingJournal() {
         .accent-text{color:var(--accent)!important}
         .app-card{background:var(--card-bg)!important;border:var(--card-border)!important}
         ${customization.compactMode ? ".compact-pad{padding:10px 12px!important}.compact-gap{gap:8px!important}" : ""}
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; }
+        *:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+        *:hover::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
       `}</style>
 
       {/* Username setup modal */}
@@ -1215,11 +1218,9 @@ export default function TradingJournal() {
           {view === "dashboard" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0, textAlign: "center" }}>
-                    {customization.showWelcome !== false && username && <span style={{ fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 4 }}>Hello, <span style={{ color: customization.accent || "#38bdf8", fontWeight: 700 }}>{username}</span> 👋</span>}
-                    Dashboard
-                  </h2>
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  {customization.showWelcome !== false && username && <div style={{ fontSize: 26, fontWeight: 400, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Grotesk',sans-serif", marginBottom: 4 }}>Hello, <span style={{ color: customization.accent || "#38bdf8", fontWeight: 700 }}>{username}</span></div>}
+                  <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Dashboard</h2>
                   {selectedDay && <button onClick={() => setSD(null)} style={{ background: "none", border: "none", color: customization.accent || "#38bdf8", fontSize: 11, cursor: "pointer", padding: 0, marginTop: 4, display: "block", textAlign: "center", width: "100%" }}>Showing {selectedDay} — clear</button>}
                 </div>
                 <Btn variant="primary" onClick={() => setView("addTrade")}>+ New Trade</Btn>
@@ -1243,9 +1244,11 @@ export default function TradingJournal() {
 
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
                 <PnlCalendar trades={trades} onDayClick={d => setSD(d === selectedDay ? null : d)} />
-                <div style={sbox}>
+                <div style={{...sbox, display: "flex", flexDirection: "column"}}>
                   <div style={{ ...ulbl, marginBottom: 10 }}>Equity Curve</div>
-                  <EquityCurve trades={filtered} />
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <EquityCurve trades={filtered} />
+                  </div>
                 </div>
               </div>
 
@@ -1293,6 +1296,7 @@ export default function TradingJournal() {
                 <Pill label="All" active={!filter.instrument} onClick={() => setFilter(f => ({ ...f, instrument: "" }))} />
                 {INSTRUMENTS.map(i => <Pill key={i} label={i} active={filter.instrument === i} onClick={() => setFilter(f => ({ ...f, instrument: i }))} />)}
                 <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)", margin: "0 3px" }} />
+                <Select value={filter.session} onChange={e => setFilter(f => ({ ...f, session: e.target.value }))} options={[{ value: "", label: "All Sessions" }, ...SESSIONS.map(s => ({ value: s, label: s }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 140 }} />
                 <Select value={filter.emotion} onChange={e => setFilter(f => ({ ...f, emotion: e.target.value }))} options={[{ value: "", label: "Emotion" }, ...EMOTIONS.map(e => ({ value: e, label: e }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 130 }} />
                 <Select value={filter.concept} onChange={e => setFilter(f => ({ ...f, concept: e.target.value }))} options={[{ value: "", label: "Concept" }, ...[...ICT_CONCEPTS, ...customConcepts].map(c => ({ value: c, label: c }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 140 }} />
               </div>
