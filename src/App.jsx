@@ -76,7 +76,7 @@ function Sparkline({data}){
 }
 
 // ─── CALENDAR ─────────────────────────────────────────────────────────────────
-function PnlCalendar({trades,onDayClick}){const[month,setMonth]=useState(()=>{const n=new Date();return{year:n.getFullYear(),month:n.getMonth()};});const dailyPnl=useMemo(()=>{const m={};trades.forEach(t=>{m[t.date]=(m[t.date]||0)+t.pnl;});return m;},[trades]);const monthlyPnl=useMemo(()=>{const prefix=`${month.year}-${String(month.month+1).padStart(2,"0")}`;let total=0;Object.entries(dailyPnl).forEach(([d,v])=>{if(d.startsWith(prefix))total+=v;});return total;},[dailyPnl,month]);const dim=new Date(month.year,month.month+1,0).getDate();const fdow=new Date(month.year,month.month,1).getDay();const mn=new Date(month.year,month.month).toLocaleString("default",{month:"long",year:"numeric"});const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);const textOutline="-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0px 3px 6px rgba(0,0,0,0.9)";return<div style={sbox}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><button onClick={()=>setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:24,padding:"4px 8px"}}>‹</button><span style={{fontSize:19,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color:"#e2e8f0"}}>{mn}</span><button onClick={()=>setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:24,padding:"4px 8px"}}>›</button></div><div style={{textAlign:"center",marginBottom:16,fontSize:16,fontWeight:800,fontFamily:"'DM Mono',monospace",color:monthlyPnl>=0?"#4ade80":"#f87171"}}>Monthly P&L: ${monthlyPnl>=0?"+":""}{monthlyPnl.toFixed(2)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>{["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:14,color:"rgba(255,255,255,0.25)",fontWeight:700,padding:4}}>{d}</div>)}{cells.map((day,i)=>{if(!day)return<div key={`e${i}`}/>;const ds=`${month.year}-${String(month.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const pnl=dailyPnl[ds];const has=pnl!==undefined;const bg=!has?"transparent":pnl>0?"rgba(34,197,94,0.15)":pnl<0?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)";const col=!has?"rgba(255,255,255,0.25)":pnl>0?"#4ade80":pnl<0?"#f87171":"rgba(255,255,255,0.4)";return<div key={ds} onClick={()=>has&&onDayClick&&onDayClick(ds)} style={{textAlign:"center",borderRadius:6,padding:"10px 2px",background:bg,cursor:has?"pointer":"default"}}><div style={{fontSize:14,color:col,fontWeight:has?700:400,textShadow:textOutline}}>{day}</div>{has&&<div style={{fontSize:16,color:col,fontWeight:700,marginTop:2,textShadow:textOutline}}>${pnl>0?"+":""}{pnl.toFixed(0)}</div>}</div>;})}</div></div>;}
+function PnlCalendar({trades,onDayClick}){const{isMobile}=useIsMobile();const[month,setMonth]=useState(()=>{const n=new Date();return{year:n.getFullYear(),month:n.getMonth()};});const dailyPnl=useMemo(()=>{const m={};trades.forEach(t=>{m[t.date]=(m[t.date]||0)+t.pnl;});return m;},[trades]);const monthlyPnl=useMemo(()=>{const prefix=`${month.year}-${String(month.month+1).padStart(2,"0")}`;let total=0;Object.entries(dailyPnl).forEach(([d,v])=>{if(d.startsWith(prefix))total+=v;});return total;},[dailyPnl,month]);const dim=new Date(month.year,month.month+1,0).getDate();const fdow=new Date(month.year,month.month,1).getDay();const mn=new Date(month.year,month.month).toLocaleString("default",{month:"long",year:"numeric"});const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);const textOutline="-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0px 3px 6px rgba(0,0,0,0.9)";return<div style={{...sbox,padding:isMobile?12:18,overflow:"hidden"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><button onClick={()=>setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:isMobile?20:24,padding:"4px 6px"}}>‹</button><span style={{fontSize:isMobile?15:19,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color:"#e2e8f0"}}>{mn}</span><button onClick={()=>setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:isMobile?20:24,padding:"4px 6px"}}>›</button></div><div style={{textAlign:"center",marginBottom:isMobile?10:16,fontSize:isMobile?13:16,fontWeight:800,fontFamily:"'DM Mono',monospace",color:monthlyPnl>=0?"#4ade80":"#f87171"}}>Monthly P&L: ${monthlyPnl>=0?"+":""}{monthlyPnl.toFixed(2)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:isMobile?2:4}}>{["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:isMobile?11:14,color:"rgba(255,255,255,0.25)",fontWeight:700,padding:isMobile?2:4}}>{d}</div>)}{cells.map((day,i)=>{if(!day)return<div key={`e${i}`}/>;const ds=`${month.year}-${String(month.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const pnl=dailyPnl[ds];const has=pnl!==undefined;const bg=!has?"transparent":pnl>0?"rgba(34,197,94,0.15)":pnl<0?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)";const col=!has?"rgba(255,255,255,0.25)":pnl>0?"#4ade80":pnl<0?"#f87171":"rgba(255,255,255,0.4)";return<div key={ds} onClick={()=>has&&onDayClick&&onDayClick(ds)} style={{textAlign:"center",borderRadius:isMobile?4:6,padding:isMobile?"6px 1px":"10px 2px",background:bg,cursor:has?"pointer":"default",overflow:"hidden"}}><div style={{fontSize:isMobile?11:14,color:col,fontWeight:has?700:400,textShadow:textOutline}}>{day}</div>{has&&<div style={{fontSize:isMobile?11:16,color:col,fontWeight:700,marginTop:1,textShadow:textOutline,whiteSpace:"nowrap"}}>${pnl>0?"+":""}{pnl.toFixed(0)}</div>}</div>;})}</div></div>;}
 
 // ─── INTERACTIVE EQUITY CURVE ────────────────────────────────────────────────
 function EquityCurve({ trades }) {
@@ -1108,40 +1108,71 @@ const PRE_MARKET_ITEMS = [
 function PreMarketChecklist({ trades, onComplete }) {
   const [checked, setChecked] = useState({});
   const [dismissed, setDismissed] = useState(false);
-  const [completedToday, setCompletedToday] = useState(false);
+  const [completedSession, setCompletedSession] = useState(false);
 
   const today = new Date().toISOString().slice(0, 10);
-  const todayTrades = trades.filter(t => t.date === today);
 
-  // Check localStorage for completion
+  // Determine current trading session based on EST/ET time
+  const getCurrentSession = () => {
+    const now = new Date();
+    // Get ET hours (approximate: UTC-5 EST, UTC-4 EDT)
+    const utcH = now.getUTCHours();
+    const utcM = now.getUTCMinutes();
+    // Rough EDT offset (Apr-Nov) vs EST (Nov-Mar)
+    const mo = now.getUTCMonth();
+    const isDST = mo >= 2 && mo <= 10; // Mar-Nov approx
+    const etH = (utcH + (isDST ? -4 : -5) + 24) % 24;
+    const mins = etH * 60 + utcM;
+    // Sessions in ET:
+    // Asia: 8PM - 1AM ET (1200 - 60 mins)
+    // London: 2AM - 5AM ET (120 - 300 mins)
+    // NY AM: 7AM - 11AM ET (420 - 660 mins)
+    // NY Lunch: 12PM - 1PM ET (720 - 780 mins)
+    // NY PM: 1:30PM - 4PM ET (810 - 960 mins)
+    if (mins >= 1200 || mins < 60) return "Asia";
+    if (mins >= 60 && mins < 420) return "London";
+    if (mins >= 420 && mins < 720) return "NY_AM";
+    return "NY_PM";
+  };
+
+  const currentSession = getCurrentSession();
+  const sessionKey = `${today}_${currentSession}`;
+
+  // Check if this session was already completed
   useEffect(() => {
     try {
-      const stored = window._preMarketComplete;
-      if (stored === today) setCompletedToday(true);
+      const stored = window._preMarketSession;
+      if (stored === sessionKey) setCompletedSession(true);
     } catch(e) {}
-  }, [today]);
+  }, [sessionKey]);
 
   const allChecked = PRE_MARKET_ITEMS.every((_, i) => checked[i]);
   const checkedCount = Object.values(checked).filter(Boolean).length;
 
+  const sessionLabel = currentSession === "NY_AM" ? "NY AM" : currentSession === "NY_PM" ? "NY PM" : currentSession;
+
   const handleComplete = () => {
-    try { window._preMarketComplete = today; } catch(e) {}
-    setCompletedToday(true);
+    try { window._preMarketSession = sessionKey; } catch(e) {}
+    setCompletedSession(true);
     if (onComplete) onComplete();
   };
 
-  // Don't show if already completed today or dismissed
-  if (completedToday || dismissed) return null;
+  const handleDismiss = () => {
+    try { window._preMarketSession = sessionKey; } catch(e) {}
+    setDismissed(true);
+    if (onComplete) onComplete();
+  };
 
-  // Only show if no trades logged today (pre-market)
-  // or always show until completed
+  // Don't show if already completed/dismissed for this session
+  if (completedSession || dismissed) return null;
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1500, padding: 16, animation: "smoothFadeUp 0.4s ease" }}>
       <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, width: "100%", maxWidth: 440, maxHeight: "85vh", overflow: "auto" }}>
         <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16 }}>Pre-Market Routine</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{today} · Complete before your first trade</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{today} · <span style={{ color: "#38bdf8", fontWeight: 600 }}>{sessionLabel} Session</span></div>
           </div>
           <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: allChecked ? "#4ade80" : "rgba(255,255,255,0.3)" }}>{checkedCount}/{PRE_MARKET_ITEMS.length}</div>
         </div>
@@ -1161,7 +1192,7 @@ function PreMarketChecklist({ trades, onComplete }) {
             <div style={{ height: "100%", width: `${(checkedCount / PRE_MARKET_ITEMS.length) * 100}%`, background: allChecked ? "#4ade80" : "linear-gradient(90deg,#0ea5e9,#6366f1)", borderRadius: 2, transition: "width 0.4s cubic-bezier(0.16,1,0.3,1)" }} />
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <button onClick={() => setDismissed(true)} style={{ flex: 1, padding: "10px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "rgba(255,255,255,0.35)", cursor: "pointer" }}>Skip Today</button>
+            <button onClick={handleDismiss} style={{ flex: 1, padding: "10px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "rgba(255,255,255,0.35)", cursor: "pointer" }}>Skip {sessionLabel}</button>
             <button onClick={handleComplete} disabled={!allChecked} style={{ flex: 1, padding: "10px", borderRadius: 7, fontSize: 12, fontWeight: 700, border: "none", background: allChecked ? "linear-gradient(135deg,#0ea5e9,#6366f1)" : "rgba(255,255,255,0.05)", color: allChecked ? "#fff" : "rgba(255,255,255,0.2)", cursor: allChecked ? "pointer" : "default", transition: "all 0.3s" }}>Ready to Trade ✓</button>
           </div>
         </div>
@@ -1711,9 +1742,9 @@ export default function TradingJournal() {
 
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
                 <PnlCalendar trades={trades} onDayClick={d => setSD(d === selectedDay ? null : d)} />
-                <div style={{...sbox, display: "flex", flexDirection: "column"}}>
+                <div style={{...sbox, display: "flex", flexDirection: "column", padding: isMobile ? 12 : 18, overflow: "hidden", minWidth: 0}}>
                   <div style={{ ...ulbl, marginBottom: 10 }}>Equity Curve</div>
-                  <div style={{ flex: 1, minHeight: 0 }}>
+                  <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" }}>
                     <EquityCurve trades={filtered} />
                   </div>
                 </div>
