@@ -76,7 +76,7 @@ function Sparkline({data}){
 }
 
 // ─── CALENDAR ─────────────────────────────────────────────────────────────────
-function PnlCalendar({trades,onDayClick}){const[month,setMonth]=useState(()=>{const n=new Date();return{year:n.getFullYear(),month:n.getMonth()};});const dailyPnl=useMemo(()=>{const m={};trades.forEach(t=>{m[t.date]=(m[t.date]||0)+t.pnl;});return m;},[trades]);const monthlyPnl=useMemo(()=>{const prefix=`${month.year}-${String(month.month+1).padStart(2,"0")}`;let total=0;Object.entries(dailyPnl).forEach(([d,v])=>{if(d.startsWith(prefix))total+=v;});return total;},[dailyPnl,month]);const dim=new Date(month.year,month.month+1,0).getDate();const fdow=new Date(month.year,month.month,1).getDay();const mn=new Date(month.year,month.month).toLocaleString("default",{month:"long",year:"numeric"});const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);const textOutline="-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0px 3px 6px rgba(0,0,0,0.9)";return<div style={sbox}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><button onClick={()=>setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:24,padding:"4px 8px"}}>‹</button><span style={{fontSize:19,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color:"#e2e8f0"}}>{mn}</span><button onClick={()=>setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:24,padding:"4px 8px"}}>›</button></div><div style={{textAlign:"center",marginBottom:16,fontSize:16,fontWeight:800,fontFamily:"'DM Mono',monospace",color:monthlyPnl>=0?"#4ade80":"#f87171"}}>Monthly P&L: ${monthlyPnl>=0?"+":""}{monthlyPnl.toFixed(2)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>{["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:14,color:"rgba(255,255,255,0.25)",fontWeight:700,padding:4}}>{d}</div>)}{cells.map((day,i)=>{if(!day)return<div key={`e${i}`}/>;const ds=`${month.year}-${String(month.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const pnl=dailyPnl[ds];const has=pnl!==undefined;const bg=!has?"transparent":pnl>0?"rgba(34,197,94,0.15)":pnl<0?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)";const col=!has?"rgba(255,255,255,0.25)":pnl>0?"#4ade80":pnl<0?"#f87171":"rgba(255,255,255,0.4)";return<div key={ds} onClick={()=>has&&onDayClick&&onDayClick(ds)} style={{textAlign:"center",borderRadius:6,padding:"10px 2px",background:bg,cursor:has?"pointer":"default"}}><div style={{fontSize:19,color:col,fontWeight:has?700:400,textShadow:textOutline}}>{day}</div>{has&&<div style={{fontSize:16,color:col,fontWeight:700,marginTop:2,textShadow:textOutline}}>${pnl>0?"+":""}{pnl.toFixed(0)}</div>}</div>;})}</div></div>;}
+function PnlCalendar({trades,onDayClick}){const[month,setMonth]=useState(()=>{const n=new Date();return{year:n.getFullYear(),month:n.getMonth()};});const dailyPnl=useMemo(()=>{const m={};trades.forEach(t=>{m[t.date]=(m[t.date]||0)+t.pnl;});return m;},[trades]);const monthlyPnl=useMemo(()=>{const prefix=`${month.year}-${String(month.month+1).padStart(2,"0")}`;let total=0;Object.entries(dailyPnl).forEach(([d,v])=>{if(d.startsWith(prefix))total+=v;});return total;},[dailyPnl,month]);const dim=new Date(month.year,month.month+1,0).getDate();const fdow=new Date(month.year,month.month,1).getDay();const mn=new Date(month.year,month.month).toLocaleString("default",{month:"long",year:"numeric"});const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);const textOutline="-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0px 3px 6px rgba(0,0,0,0.9)";return<div style={sbox}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><button onClick={()=>setMonth(m=>m.month===0?{year:m.year-1,month:11}:{...m,month:m.month-1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:24,padding:"4px 8px"}}>‹</button><span style={{fontSize:19,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color:"#e2e8f0"}}>{mn}</span><button onClick={()=>setMonth(m=>m.month===11?{year:m.year+1,month:0}:{...m,month:m.month+1})} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:24,padding:"4px 8px"}}>›</button></div><div style={{textAlign:"center",marginBottom:16,fontSize:16,fontWeight:800,fontFamily:"'DM Mono',monospace",color:monthlyPnl>=0?"#4ade80":"#f87171"}}>Monthly P&L: ${monthlyPnl>=0?"+":""}{monthlyPnl.toFixed(2)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>{["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:14,color:"rgba(255,255,255,0.25)",fontWeight:700,padding:4}}>{d}</div>)}{cells.map((day,i)=>{if(!day)return<div key={`e${i}`}/>;const ds=`${month.year}-${String(month.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const pnl=dailyPnl[ds];const has=pnl!==undefined;const bg=!has?"transparent":pnl>0?"rgba(34,197,94,0.15)":pnl<0?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.04)";const col=!has?"rgba(255,255,255,0.25)":pnl>0?"#4ade80":pnl<0?"#f87171":"rgba(255,255,255,0.4)";return<div key={ds} onClick={()=>has&&onDayClick&&onDayClick(ds)} style={{textAlign:"center",borderRadius:6,padding:"10px 2px",background:bg,cursor:has?"pointer":"default"}}><div style={{fontSize:14,color:col,fontWeight:has?700:400,textShadow:textOutline}}>{day}</div>{has&&<div style={{fontSize:16,color:col,fontWeight:700,marginTop:2,textShadow:textOutline}}>${pnl>0?"+":""}{pnl.toFixed(0)}</div>}</div>;})}</div></div>;}
 
 // ─── INTERACTIVE EQUITY CURVE ────────────────────────────────────────────────
 function EquityCurve({ trades }) {
@@ -935,6 +935,7 @@ export default function TradingJournal() {
   const [filter, setFilter] = useState({ instrument: "", session: "", emotion: "", concept: "" });
   const [selectedDay, setSD] = useState(null);
   const [mobileMenu, setMM] = useState(false);
+  const [activeFilter, setActiveFilter] = useState(null);
   const [dbLoading, setDL] = useState(false);
   const { isMobile, isTablet } = useIsMobile();
 
@@ -1254,10 +1255,10 @@ export default function TradingJournal() {
 
       {/* Mobile menu */}
       {isMobile && mobileMenu && (
-        <div style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "8px 16px", display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {navItems.map(n => <button key={n.key} onClick={() => { setView(n.key); setSD(null); setMM(false); }} style={{ flex: "1 1 auto", padding: "8px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif", textAlign: "center", background: isAct(n.key) ? "rgba(255,255,255,0.07)" : "transparent", color: isAct(n.key) ? "#e2e8f0" : "rgba(255,255,255,0.3)" }}>{n.label}</button>)}
-          <button onClick={() => { setShowSettings(true); setMM(false); }} style={{ flex: "1 1 auto", padding: "8px", borderRadius: 7, fontSize: 11, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}>⚙ Settings</button>
-          <button onClick={() => supabase.auth.signOut()} style={{ flex: "1 1 auto", padding: "8px", borderRadius: 7, fontSize: 11, border: "1px solid rgba(239,68,68,0.2)", background: "transparent", color: "#f87171", cursor: "pointer" }}>Log Out</button>
+        <div className="animated-view" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "12px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+          {navItems.map(n => <button key={n.key} onClick={() => { setView(n.key); setSD(null); setMM(false); }} style={{ padding: "10px 8px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif", textAlign: "center", background: isAct(n.key) ? "rgba(255,255,255,0.07)" : "transparent", color: isAct(n.key) ? "#e2e8f0" : "rgba(255,255,255,0.3)" }}>{n.label}</button>)}
+          <button onClick={() => { setShowSettings(true); setMM(false); }} style={{ padding: "10px 8px", borderRadius: 7, fontSize: 11, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}>⚙ Settings</button>
+          <button onClick={() => supabase.auth.signOut()} style={{ gridColumn: "span 3", padding: "10px", borderRadius: 7, fontSize: 12, fontWeight: 700, border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.05)", color: "#f87171", cursor: "pointer", marginTop: 4 }}>Log Out</button>
         </div>
       )}
 
@@ -1270,21 +1271,40 @@ export default function TradingJournal() {
           {/* DASHBOARD */}
           {view === "dashboard" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                <div style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ position: "relative", display: "flex", justifyContent: "center", alignItems: "center", width: "100%" }}>
+                <div style={{ textAlign: "center" }}>
                   {customization.showWelcome !== false && username && <div style={{ fontSize: 26, fontWeight: 400, color: "rgba(255,255,255,0.4)", fontFamily: "'Space Grotesk',sans-serif", marginBottom: 4 }}>Hello, <span style={{ color: customization.accent || "#38bdf8", fontWeight: 700 }}>{username}</span></div>}
                   <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Dashboard</h2>
                   {selectedDay && <button onClick={() => setSD(null)} style={{ background: "none", border: "none", color: customization.accent || "#38bdf8", fontSize: 11, cursor: "pointer", padding: 0, marginTop: 4, display: "block", textAlign: "center", width: "100%" }}>Showing {selectedDay} — clear</button>}
                 </div>
-                <Btn variant="primary" onClick={() => setView("addTrade")}>+ New Trade</Btn>
               </div>
 
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Pill label="All" active={!filter.instrument} onClick={() => setFilter(f => ({ ...f, instrument: "" }))} />
-                {INSTRUMENTS.map(i => <Pill key={i} label={i} active={filter.instrument === i} onClick={() => setFilter(f => ({ ...f, instrument: i }))} />)}
-                <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.06)", margin: "0 4px" }} />
-                <Pill label="All Sessions" active={!filter.session} onClick={() => setFilter(f => ({ ...f, session: "" }))} />
-                {SESSIONS.map(s => <Pill key={s} label={s} active={filter.session === s} onClick={() => setFilter(f => ({ ...f, session: s }))} />)}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap", width: "100%" }}>
+                {isMobile ? (
+                  <div style={{ display: "flex", gap: 8, flex: 1, alignItems: "flex-start" }}>
+                    <div style={{ flex: 1 }}><Select value={filter.instrument} onChange={e => setFilter(f => ({ ...f, instrument: e.target.value }))} options={[{ value: "", label: "Symbol" }, ...INSTRUMENTS.map(i => ({ value: i, label: i }))]} style={{ padding: "8px 10px", fontSize: 12, margin: 0 }} /></div>
+                    <div style={{ flex: 1 }}><Select value={filter.session} onChange={e => setFilter(f => ({ ...f, session: e.target.value }))} options={[{ value: "", label: "Session" }, ...SESSIONS.map(s => ({ value: s, label: s }))]} style={{ padding: "8px 10px", fontSize: 12, margin: 0 }} /></div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "2px" }}>
+                      <button onClick={() => setActiveFilter(activeFilter === 'symbol' ? null : 'symbol')} style={{ background: activeFilter === 'symbol' ? "rgba(255,255,255,0.1)" : "transparent", border: "none", borderRadius: 6, color: "#e2e8f0", padding: "6px 14px", fontSize: 12, cursor: "pointer", fontWeight: 600, transition: "background 0.2s" }}>Symbol {filter.instrument ? `(${filter.instrument})` : ""}</button>
+                      <div style={{ display: "flex", gap: 4, overflow: "hidden", maxWidth: activeFilter === 'symbol' ? 600 : 0, opacity: activeFilter === 'symbol' ? 1 : 0, transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)", paddingLeft: activeFilter === 'symbol' ? 8 : 0, whiteSpace: "nowrap", alignItems: "center" }}>
+                        <Pill label="All" active={!filter.instrument} onClick={() => {setFilter(f => ({ ...f, instrument: "" })); setActiveFilter(null);}} />
+                        {INSTRUMENTS.map(i => <Pill key={i} label={i} active={filter.instrument === i} onClick={() => {setFilter(f => ({ ...f, instrument: i })); setActiveFilter(null);}} />)}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "2px" }}>
+                      <button onClick={() => setActiveFilter(activeFilter === 'session' ? null : 'session')} style={{ background: activeFilter === 'session' ? "rgba(255,255,255,0.1)" : "transparent", border: "none", borderRadius: 6, color: "#e2e8f0", padding: "6px 14px", fontSize: 12, cursor: "pointer", fontWeight: 600, transition: "background 0.2s" }}>Session {filter.session ? `(${filter.session})` : ""}</button>
+                      <div style={{ display: "flex", gap: 4, overflow: "hidden", maxWidth: activeFilter === 'session' ? 600 : 0, opacity: activeFilter === 'session' ? 1 : 0, transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)", paddingLeft: activeFilter === 'session' ? 8 : 0, whiteSpace: "nowrap", alignItems: "center" }}>
+                        <Pill label="All" active={!filter.session} onClick={() => {setFilter(f => ({ ...f, session: "" })); setActiveFilter(null);}} />
+                        {SESSIONS.map(s => <Pill key={s} label={s} active={filter.session === s} onClick={() => {setFilter(f => ({ ...f, session: s })); setActiveFilter(null);}} />)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <Btn variant="primary" onClick={() => setView("addTrade")} style={{ padding: isMobile ? "9px 16px" : "8px 16px", fontSize: 12, textShadow: "-1px -1px 0 rgba(0,0,0,0.3), 1px -1px 0 rgba(0,0,0,0.3), -1px 1px 0 rgba(0,0,0,0.3), 1px 1px 0 rgba(0,0,0,0.3), 0px 3px 6px rgba(0,0,0,0.8)" }}>+ New Trade</Btn>
               </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
