@@ -47,6 +47,28 @@ function buildBalanceHistory(account, allTrades) {
 function exportCSV(trades){const h=["Date","Time","Instrument","Session","Direction","Contracts","Entry","Stop","Target","Exit","PnL","RR","Grade","ICT Concepts","Emotions","Mistakes","Entry Model","HTF Bias","Chart URL","Notes"];const rows=trades.map(t=>[t.date,t.time,t.instrument,t.session,t.direction,t.contracts,t.entry,t.stop,t.target,t.exit,t.pnl,t.rr,t.grade,(t.ictConcepts||[]).join(";"),(t.emotions||[]).join(";"),(t.mistakes||[]).join(";"),t.entryModel,t.htfBias,t.chartUrl||"",`"${(t.notes||"").replace(/"/g,'""')}"`]);const csv=[h.join(","),...rows.map(r=>r.join(","))].join("\n");const b=new Blob([csv],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`ict-trades-${new Date().toISOString().slice(0,10)}.csv`;a.click();}
 function exportJSON(trades,accounts,customModels,customConcepts){const b=new Blob([JSON.stringify({trades,accounts,customModels,customConcepts},null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`ict-journal-${new Date().toISOString().slice(0,10)}.json`;a.click();}
 
+// ─── PROP FIRM CSV HELPERS ───────────────────────────────────────────────────
+function mapContractToInstrument(contract) {
+  if (!contract) return "NQ";
+  const c = contract.toUpperCase();
+  const match = c.match(/^(MNQ|MES|MGC|NQ|ES|GC|YM|RTY|CL|SI|HG|ZB|ZN|ZF)/i);
+  if (match) return match[1].toUpperCase();
+  if (c.length > 2) {
+    const base = c.slice(0, -2);
+    if (["MNQ","MES","MGC","NQ","ES","GC"].includes(base)) return base;
+  }
+  return "NQ";
+}
+
+function detectSessionFromHourMin(hours, minutes) {
+  const mins = hours * 60 + (minutes || 0);
+  if (mins >= 1200 || mins < 60) return "Asia";
+  if (mins >= 60 && mins < 420) return "London";
+  if (mins >= 420 && mins < 720) return "NY AM";
+  if (mins >= 720 && mins < 810) return "NY Lunch";
+  return "NY PM";
+}
+
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const sbox={background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,padding:18};
 const ulbl={fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700};
@@ -242,7 +264,7 @@ function AccountProgress({account}){if(!account.profitTarget)return null;const p
 function DayOfWeekWidget({trades}){const stats=useMemo(()=>{const m={};["Mon","Tue","Wed","Thu","Fri"].forEach(d=>m[d]={w:0,t:0,pnl:0});trades.forEach(t=>{if(!t.date)return;const d=new Date(t.date+"T12:00:00");const day=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];if(!m[day])return;m[day].t++;m[day].pnl+=t.pnl;if(t.pnl>0)m[day].w++;});return m;},[trades]);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Day of Week</div>{Object.entries(stats).map(([day,d])=><div key={day} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)",fontSize:12}}><span>{day}</span><div style={{display:"flex",gap:12}}><span style={{color:"rgba(255,255,255,0.35)",fontSize:10}}>{d.t?((d.w/d.t)*100).toFixed(0):0}% WR</span><span style={{color:d.pnl>=0?"#4ade80":"#f87171",fontWeight:600,minWidth:60,textAlign:"right"}}>${d.pnl.toFixed(0)}</span></div></div>)}</div>;}
 function ConfluenceHeatmap({trades}){const stats=useMemo(()=>{const b={"High Edge (8-10)":{w:0,t:0,pnl:0,c:"#4ade80"},"Med Edge (5-7)":{w:0,t:0,pnl:0,c:"#fbbf24"},"Low Edge (0-4)":{w:0,t:0,pnl:0,c:"#f87171"}};trades.forEach(t=>{const sc=t.confluenceScore||0;const k=sc>=8?"High Edge (8-10)":sc>=5?"Med Edge (5-7)":"Low Edge (0-4)";b[k].t++;b[k].pnl+=t.pnl;if(t.pnl>0)b[k].w++;});return b;},[trades]);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Confluence Heatmap</div>{Object.entries(stats).map(([l,d])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)",fontSize:12}}><span style={{color:d.c,fontWeight:600}}>{l}</span><div style={{display:"flex",gap:12}}><span style={{color:"rgba(255,255,255,0.35)",fontSize:10}}>{d.t?((d.w/d.t)*100).toFixed(0):0}% WR</span><span style={{color:d.pnl>=0?"#4ade80":"#f87171",fontWeight:600,minWidth:60,textAlign:"right"}}>${d.pnl.toFixed(0)}</span></div></div>)}</div>;}
 function DrawdownBufferWidget({accounts}){const act=accounts.filter(a=>a.status==="Active"&&a.maxLoss>0);if(!act.length)return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trailing Drawdown Buffer</div><div style={{fontSize:11,color:"rgba(255,255,255,0.2)"}}>No active prop accounts with Max DD set</div></div>;return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trailing Drawdown Buffer</div>{act.map(a=>{const hwm=Math.max(a.size,...(a.balanceHistory||[]));const ddLimit=hwm-a.maxLoss;const buffer=a.currentBalance-ddLimit;const bufferPct=Math.max(0,Math.min(100,(buffer/a.maxLoss)*100));return<div key={a.id} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}><span style={{fontWeight:600,color:"rgba(255,255,255,0.7)"}}>{a.name}</span><span style={{color:buffer>0?"#4ade80":"#f87171",fontFamily:"'DM Mono',monospace",fontWeight:800}}>${buffer.toFixed(0)} away from rule</span></div><div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${bufferPct}%`,background:bufferPct>30?"#4ade80":bufferPct>15?"#fbbf24":"#f87171",borderRadius:3,transition:"width 0.3s"}}/></div></div>;})}</div>;}
-function TradeDurationWidget({trades}){const[hovered,setHovered]=useState(null);const data=useMemo(()=>{return trades.filter(t=>t.time&&t.exitTime).map(t=>{const[h1,m1]=t.time.split(":").map(Number);const[h2,m2]=t.exitTime.split(":").map(Number);let d=(h2*60+m2)-(h1*60+m1);if(d<0)d+=1440;return{d,p:t.pnl,id:t.id,instrument:t.instrument,direction:t.direction,session:t.session,date:t.date,rr:t.rr,entry:t.entry,exit:t.exit};});},[trades]);if(data.length<2)return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trade Duration vs P&L</div><div style={{fontSize:11,color:"rgba(255,255,255,0.2)",padding:"20px 0",textAlign:"center"}}>Log Entry & Exit times to generate scatter plot</div></div>;const maxD=Math.max(...data.map(d=>d.d),60);const rawMaxP=Math.max(...data.map(d=>d.p),100);const rawMinP=Math.min(...data.map(d=>d.p),-100);const pBuffer=(rawMaxP-rawMinP)*0.12||50;const maxP=rawMaxP+pBuffer;const minP=rawMinP-pBuffer;const rng=maxP-minP||1;const toX=v=>5+(v/maxD)*90;const toY=v=>6+((maxP-v)/rng)*68;const zY=toY(0);const xTicks=[];const step=maxD<=30?5:maxD<=60?10:maxD<=120?15:maxD<=300?30:60;for(let i=0;i<=maxD;i+=step)xTicks.push(i);if(xTicks[xTicks.length-1]<maxD)xTicks.push(maxD);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Duration vs P&L Scatter</div><div style={{position:"relative",height:180,width:"100%"}}>{/* Y axis zero line */}<div style={{position:"absolute",top:`${zY}%`,left:"5%",right:"5%",height:1,borderTop:"1px dashed rgba(255,255,255,0.15)"}}/>{/* Y axis labels */}<div style={{position:"absolute",left:0,top:`${toY(rawMaxP)}%`,fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.25)",transform:"translateY(-50%)"}}>${rawMaxP>0?"+":""}{rawMaxP.toFixed(0)}</div><div style={{position:"absolute",left:0,top:`${toY(rawMinP)}%`,fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.25)",transform:"translateY(-50%)"}}>${rawMinP.toFixed(0)}</div>{/* X axis line - positioned with buffer below lowest possible dot */}<div style={{position:"absolute",top:"80%",left:"5%",right:"5%",height:1,background:"rgba(255,255,255,0.08)"}}/>{/* X axis ticks */}{xTicks.map(t=><div key={t} style={{position:"absolute",top:"83%",left:`${toX(t)}%`,transform:"translateX(-50%)",fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.3)"}}>{t}m</div>)}{/* X axis tick marks */}{xTicks.map(t=><div key={`tm${t}`} style={{position:"absolute",top:"79%",left:`${toX(t)}%`,width:1,height:4,background:"rgba(255,255,255,0.15)"}}/> )}{/* Dots */}{data.map(d=><div key={d.id} style={{position:"absolute",left:`${toX(d.d)}%`,top:`${toY(d.p)}%`,width:10,height:10,minWidth:10,minHeight:10,borderRadius:"50%",background:d.p>=0?"#4ade80":"#f87171",transform:`translate(-50%,-50%)${hovered===d.id?" scale(1.6)":""}`,boxShadow:hovered===d.id?"0 0 0 2px #fff":"0 0 0 2px #000",transition:"all 0.2s cubic-bezier(0.16,1,0.3,1)",cursor:"pointer",zIndex:hovered===d.id?20:10}} onMouseEnter={()=>setHovered(d.id)} onMouseLeave={()=>setHovered(null)}/>)}{/* Tooltip */}{hovered&&(()=>{const d=data.find(x=>x.id===hovered);if(!d)return null;const tx=toX(d.d);const ty=toY(d.p);return<div style={{position:"absolute",left:`${Math.min(Math.max(tx,15),85)}%`,top:`${Math.max(ty-2,0)}%`,transform:"translate(-50%,-100%)",background:"#000",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"8px 12px",fontSize:10,pointerEvents:"none",zIndex:30,whiteSpace:"nowrap",boxShadow:"0 4px 16px rgba(0,0,0,0.6)"}}><div style={{fontWeight:800,color:d.p>=0?"#4ade80":"#f87171",fontSize:13,marginBottom:4}}>{d.p>=0?"+":""}${d.p.toFixed(2)}</div><div style={{color:"rgba(255,255,255,0.5)",lineHeight:1.6}}><div><span style={{color:"#38bdf8",fontWeight:600}}>{d.instrument}</span> · {d.direction==="Long"?"Long":"Short"} · {d.rr||"--"}</div><div>{d.date} · {d.session}</div><div>Duration: <span style={{color:"#e2e8f0",fontWeight:600}}>{d.d}m</span></div><div>Entry: {d.entry||"--"} → Exit: {d.exit||"--"}</div></div></div>;})()}<div style={{position:"absolute",top:"90%",left:"5%",right:"5%",display:"flex",justifyContent:"center",fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.2)",letterSpacing:"0.1em",textTransform:"uppercase"}}>DURATION (MINUTES)</div></div></div>;}
+function TradeDurationWidget({trades}){const[hovered,setHovered]=useState(null);const data=useMemo(()=>{return trades.filter(t=>t.time&&t.exitTime).map(t=>{const[h1,m1]=t.time.split(":").map(Number);const[h2,m2]=t.exitTime.split(":").map(Number);let d=(h2*60+m2)-(h1*60+m1);if(d<0)d+=1440;return{d,p:t.pnl,id:t.id,instrument:t.instrument,direction:t.direction,session:t.session,date:t.date,rr:t.rr,entry:t.entry,exit:t.exit};});},[trades]);if(data.length<2)return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Trade Duration vs P&L</div><div style={{fontSize:11,color:"rgba(255,255,255,0.2)",padding:"20px 0",textAlign:"center"}}>Log Entry & Exit times to generate scatter plot</div></div>;const maxD=Math.max(...data.map(d=>d.d),60);const rawMaxP=Math.max(...data.map(d=>d.p),100);const rawMinP=Math.min(...data.map(d=>d.p),-100);const pBuffer=(rawMaxP-rawMinP)*0.12||50;const maxP=rawMaxP+pBuffer;const minP=rawMinP-pBuffer;const rng=maxP-minP||1;const toX=v=>5+(v/maxD)*90;const toY=v=>6+((maxP-v)/rng)*68;const zY=toY(0);const xTicks=[];const step=maxD<=30?5:maxD<=60?10:maxD<=120?15:maxD<=300?30:60;for(let i=0;i<=maxD;i+=step)xTicks.push(i);if(xTicks[xTicks.length-1]<maxD)xTicks.push(maxD);return<div style={sbox}><div style={{...ulbl,marginBottom:10}}>Duration vs P&L Scatter</div><div style={{position:"relative",height:180,width:"100%"}}>{/* Y axis zero line */}<div style={{position:"absolute",top:`${zY}%`,left:"5%",right:"5%",height:1,borderTop:"1px dashed rgba(255,255,255,0.15)"}}/>{/* Y axis labels */}<div style={{position:"absolute",left:0,top:`${toY(rawMaxP)}%`,fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.25)",transform:"translateY(-50%)"}}>${rawMaxP>0?"+":""}{rawMaxP.toFixed(0)}</div><div style={{position:"absolute",left:0,top:`${toY(rawMinP)}%`,fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.25)",transform:"translateY(-50%)"}}>${rawMinP.toFixed(0)}</div>{/* X axis line */}<div style={{position:"absolute",top:"80%",left:"5%",right:"5%",height:1,background:"rgba(255,255,255,0.08)"}}/>{/* X axis ticks */}{xTicks.map(t=><div key={t} style={{position:"absolute",top:"83%",left:`${toX(t)}%`,transform:"translateX(-50%)",fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.3)"}}>{t}m</div>)}{/* X axis tick marks */}{xTicks.map(t=><div key={`tm${t}`} style={{position:"absolute",top:"79%",left:`${toX(t)}%`,width:1,height:4,background:"rgba(255,255,255,0.15)"}}/> )}{/* Dots */}{data.map(d=><div key={d.id} style={{position:"absolute",left:`${toX(d.d)}%`,top:`${toY(d.p)}%`,width:10,height:10,minWidth:10,minHeight:10,borderRadius:"50%",background:d.p>=0?"#4ade80":"#f87171",transform:`translate(-50%,-50%)${hovered===d.id?" scale(1.6)":""}`,boxShadow:hovered===d.id?"0 0 0 2px #fff":"0 0 0 2px #000",transition:"all 0.2s cubic-bezier(0.16,1,0.3,1)",cursor:"pointer",zIndex:hovered===d.id?20:10}} onMouseEnter={()=>setHovered(d.id)} onMouseLeave={()=>setHovered(null)}/>)}{/* Tooltip */}{hovered&&(()=>{const d=data.find(x=>x.id===hovered);if(!d)return null;const tx=toX(d.d);const ty=toY(d.p);return<div style={{position:"absolute",left:`${Math.min(Math.max(tx,15),85)}%`,top:`${Math.max(ty-2,0)}%`,transform:"translate(-50%,-100%)",background:"#000",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,padding:"8px 12px",fontSize:10,pointerEvents:"none",zIndex:30,whiteSpace:"nowrap",boxShadow:"0 4px 16px rgba(0,0,0,0.6)"}}><div style={{fontWeight:800,color:d.p>=0?"#4ade80":"#f87171",fontSize:13,marginBottom:4}}>{d.p>=0?"+":""}${d.p.toFixed(2)}</div><div style={{color:"rgba(255,255,255,0.5)",lineHeight:1.6}}><div><span style={{color:"#38bdf8",fontWeight:600}}>{d.instrument}</span> · {d.direction==="Long"?"Long":"Short"} · {d.rr||"--"}</div><div>{d.date} · {d.session}</div><div>Duration: <span style={{color:"#e2e8f0",fontWeight:600}}>{d.d}m</span></div><div>Entry: {d.entry||"--"} → Exit: {d.exit||"--"}</div></div></div>;})()}<div style={{position:"absolute",top:"90%",left:"5%",right:"5%",display:"flex",justifyContent:"center",fontSize:8,fontFamily:"'DM Mono',monospace",color:"rgba(255,255,255,0.2)",letterSpacing:"0.1em",textTransform:"uppercase"}}>DURATION (MINUTES)</div></div></div>;}
 
 // ─── S&P 500 COMPARISON ───────────────────────────────────────────────────────
 function generateSPCurve(nPoints, totalReturnPct) {
@@ -295,7 +317,6 @@ function SPComparison({ trades }) {
     if (raw.length < 2) {
       traderPts = Array(nPts).fill(0);
     } else {
-      // Interpolate trader curve to nPts
       traderPts = Array.from({ length: nPts }, (_, i) => {
         const idx = (i / (nPts - 1)) * (raw.length - 1);
         const lo = Math.floor(idx), hi = Math.ceil(idx);
@@ -368,9 +389,7 @@ function SPComparison({ trades }) {
       <div style={{ position: "relative" }}>
         <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: isMobile ? 120 : 160 }} preserveAspectRatio="none">
           <line x1="0" y1={zy} x2={w} y2={zy} stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" strokeDasharray="4,4" />
-          {/* S&P 500 line */}
           <polyline fill="none" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="6,3" points={toSvg(spPts)} strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-          {/* Trader line */}
           <polyline fill="none" stroke={summary.you >= 0 ? "#4ade80" : "#f87171"} strokeWidth="2" points={toSvg(traderPts)} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
@@ -419,7 +438,6 @@ function MonteCarloSim({ trades }) {
       const sc = [];
       for (let i = 0; i < Math.min(30, sims.length); i++) sc.push(sims[Math.floor(Math.random() * sims.length)].curve);
 
-      // Compute median path (50th percentile at each step)
       const maxLen = Math.max(...sims.map(s => s.curve.length));
       const medianPath = Array.from({ length: maxLen }, (_, step) => {
         const vals = sims.map(s => s.curve[Math.min(step, s.curve.length - 1)]).sort((a, b) => a - b);
@@ -476,7 +494,6 @@ function MonteCarloSim({ trades }) {
                             const pts = c.map((v, i) => `${(i / Math.max(c.length - 1, 1)) * 400},${200 - ((v - mn) / rng) * 200}`).join(" ");
                             return <polyline key={ci} fill="none" stroke={c[c.length - 1] >= results.startBal ? "rgba(74,222,128,0.25)" : "rgba(248,113,113,0.25)"} strokeWidth="1" points={pts} />;
                           })}
-                          {/* Median path highlighted */}
                           {(() => {
                             const mp = results.medianPath;
                             const pts = mp.map((v, i) => `${(i / Math.max(mp.length - 1, 1)) * 400},${200 - ((v - mn) / rng) * 200}`).join(" ");
@@ -501,7 +518,6 @@ function MonteCarloSim({ trades }) {
             </>
           )}
 
-          {/* S&P 500 Comparison - always visible */}
           <div>
             <div style={{ ...ulbl, marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>Performance vs. S&P 500</div>
             <SPComparison trades={trades} />
@@ -515,7 +531,6 @@ function MonteCarloSim({ trades }) {
 // ─── TRADE FORM ───────────────────────────────────────────────────────────────
 function TradeForm({trade,accounts,customModels,customConcepts,onSave,onCancel,onAddModel,onAddConcept,defaultSession,defaultInstrument}){const{isMobile}=useIsMobile();const[form,setForm]=useState(trade||{id:"",date:new Date().toISOString().slice(0,10),time:"",exitTime:"",instrument:defaultInstrument||"NQ",session:defaultSession||"NY AM",direction:"Long",contracts:1,entry:"",stop:"",target:"",exit:"",pnl:0,ictConcepts:[],emotions:["Calm"],grade:"B",accountId:"",notes:"",rr:"",partials:"",preTradeNarrative:"",postTradeReview:"",htfBias:"",ltfEntry:"",confluenceScore:0,mistakes:[],rulesFollowed:[],drawOnLiquidity:"",entryModel:"",chartUrl:""});const[nc,setNC]=useState("");const set=(k,v)=>setForm(f=>({...f,[k]:v}));const allC=[...ICT_CONCEPTS,...(customConcepts||[])];const allM=[...DEFAULT_MODELS,...(customModels||[])];useEffect(()=>{if(form.emotion&&!form.emotions)setForm(f=>({...f,emotions:[f.emotion]}));},[]);
 
-// Auto-detect session from trade time (updates whenever time changes)
 const detectSession=(time)=>{if(!time)return null;const[h,m]=(time).split(":").map(Number);const mins=h*60+(m||0);if(mins>=1200||mins<60)return"Asia";if(mins>=120&&mins<=300)return"London";if(mins>=420&&mins<=660)return"NY AM";if(mins>=720&&mins<=780)return"NY Lunch";if(mins>=810&&mins<=960)return"NY PM";return null;};
 useEffect(()=>{if(form.time){const detected=detectSession(form.time);if(detected)setForm(f=>({...f,session:detected}));}},[form.time]);
 
@@ -535,7 +550,6 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
   const fileRef = useRef();
   const csvRef = useRef();
 
-  // Customization state
   const [accent, setAccent] = useState(customization?.accent || "#38bdf8");
   const [cardStyle, setCardStyle] = useState(customization?.cardStyle || "glass");
   const [compactMode, setCompactMode] = useState(customization?.compactMode || false);
@@ -586,35 +600,127 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
     setTimeout(() => setSaveMsg(""), 3000);
   };
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FIX 2: Smart CSV import - auto-detects prop firm format vs journal format
+  // ═══════════════════════════════════════════════════════════════════════════
   const handleImportCSV = async (file) => {
     if (!file) return;
     setImporting(true);
     try {
       const text = await file.text();
-      const lines = text.trim().split("\n");
+      const clean = text.replace(/^\uFEFF/, ""); // strip BOM
+      const lines = clean.trim().split(/\r?\n/);
+      if (lines.length < 2) { setSaveMsg("CSV is empty."); setImporting(false); return; }
+
+      const headerLine = lines[0].toLowerCase();
       let count = 0;
-      for (const line of lines.slice(1)) {
-        const [date,time,instrument,session,direction,contracts,entry,stop,target,exit_price,pnl,rr,grade,ictStr,emotStr,mistStr,entryModel,htfBias,chartUrl,notes] = line.split(",");
-        if (!date) continue;
-        const row = {
-          user_id: user.id, date, time: time||"", instrument: instrument||"NQ", session: session||"NY AM",
-          direction: direction||"Long", contracts: parseInt(contracts)||1, entry: parseFloat(entry)||null,
-          stop: parseFloat(stop)||null, target: parseFloat(target)||null, exit_price: parseFloat(exit_price)||null,
-          pnl: parseFloat(pnl)||0, rr: rr||"", grade: grade||"B",
-          ict_concepts: ictStr ? ictStr.split(";").filter(Boolean) : [],
-          emotions: emotStr ? emotStr.split(";").filter(Boolean) : ["Calm"],
-          mistakes: mistStr ? mistStr.split(";").filter(Boolean) : [],
-          entry_model: entryModel||"", htf_bias: htfBias||"", chart_url: chartUrl||"",
-          notes: (notes||"").replace(/^"|"$/g,"").replace(/""/g,'"'),
-          rules_followed: [], confluence_score: 0, pre_trade_narrative: "", post_trade_review: "", partials: "",
-        };
-        const { error } = await supabase.from("trades").insert(row);
-        if (!error) count++;
+
+      // ── Detect prop firm CSV format ──
+      const isPropFirmFormat = headerLine.includes("contractname") ||
+                                headerLine.includes("enteredat") ||
+                                headerLine.includes("entryprice") ||
+                                headerLine.includes("tradeduration");
+
+      if (isPropFirmFormat) {
+        // ── PROP FIRM FORMAT (Topstep, Apex, etc.) ──
+        const headers = lines[0].split(",").map(h => h.trim().replace(/^\uFEFF/, ""));
+        const colIdx = {};
+        headers.forEach((h, i) => { colIdx[h.toLowerCase()] = i; });
+
+        const iContract = colIdx["contractname"] ?? colIdx["contract"] ?? 1;
+        const iEnteredAt = colIdx["enteredat"] ?? colIdx["entered_at"] ?? colIdx["entrytime"] ?? 2;
+        const iExitedAt = colIdx["exitedat"] ?? colIdx["exited_at"] ?? colIdx["exittime"] ?? 3;
+        const iEntryPrice = colIdx["entryprice"] ?? colIdx["entry_price"] ?? colIdx["entry"] ?? 4;
+        const iExitPrice = colIdx["exitprice"] ?? colIdx["exit_price"] ?? colIdx["exit"] ?? 5;
+        const iPnL = colIdx["pnl"] ?? colIdx["p&l"] ?? colIdx["profit"] ?? colIdx["netpnl"] ?? 7;
+        const iSize = colIdx["size"] ?? colIdx["qty"] ?? colIdx["quantity"] ?? colIdx["contracts"] ?? 8;
+        const iType = colIdx["type"] ?? colIdx["side"] ?? colIdx["direction"] ?? 9;
+
+        for (const line of lines.slice(1)) {
+          if (!line.trim()) continue;
+          const cols = line.split(",");
+          if (cols.length < 8) continue;
+
+          const contract = cols[iContract]?.trim() || "";
+          const instrument = mapContractToInstrument(contract);
+          const enteredAtRaw = cols[iEnteredAt]?.trim() || "";
+          const exitedAtRaw = cols[iExitedAt]?.trim() || "";
+          const entryPrice = parseFloat(cols[iEntryPrice]) || null;
+          const exitPrice = parseFloat(cols[iExitPrice]) || null;
+          const pnl = parseFloat(cols[iPnL]) || 0;
+          const size = parseInt(cols[iSize]) || 1;
+          const typeRaw = (cols[iType]?.trim() || "").toLowerCase();
+          const direction = typeRaw.includes("long") || typeRaw.includes("buy") ? "Long" : "Short";
+
+          // Parse date/time from "MM/DD/YYYY HH:MM:SS -05:00"
+          let date = "", time = "", exitTime = "";
+          const entryMatch = enteredAtRaw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+          if (entryMatch) {
+            const [, mo, dy, yr, hr, mn] = entryMatch;
+            date = `${yr}-${mo.padStart(2, "0")}-${dy.padStart(2, "0")}`;
+            time = `${hr.padStart(2, "0")}:${mn}`;
+          }
+          const exitMatch = exitedAtRaw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+          if (exitMatch) {
+            const [, , , , hr, mn] = exitMatch;
+            exitTime = `${hr.padStart(2, "0")}:${mn}`;
+          }
+
+          if (!date) continue;
+
+          // Auto-detect session
+          let session = "NY AM";
+          if (time) {
+            const [h, m] = time.split(":").map(Number);
+            session = detectSessionFromHourMin(h, m);
+          }
+
+          const row = {
+            user_id: user.id, date, time: time || "", exit_time: exitTime || null,
+            instrument, session, direction, contracts: size,
+            entry: entryPrice, stop: null, target: null, exit_price: exitPrice,
+            pnl: parseFloat(pnl.toFixed(2)), rr: "", grade: "B",
+            ict_concepts: [], emotions: ["Calm"], mistakes: [],
+            entry_model: "", htf_bias: "", chart_url: "",
+            notes: `Imported from prop firm. Contract: ${contract}`,
+            rules_followed: [], confluence_score: 0,
+            pre_trade_narrative: "", post_trade_review: "", partials: "",
+          };
+
+          const { error } = await supabase.from("trades").insert(row);
+          if (!error) count++;
+        }
+        setSaveMsg(`Imported ${count} trades from prop firm CSV. Refresh to see them.`);
+
+      } else {
+        // ── JOURNAL'S OWN EXPORT FORMAT ──
+        for (const line of lines.slice(1)) {
+          const [date,time,instrument,session,direction,contracts,entry,stop,target,exit_price,pnl,rr,grade,ictStr,emotStr,mistStr,entryModel,htfBias,chartUrl,notes] = line.split(",");
+          if (!date) continue;
+          const row = {
+            user_id: user.id, date, time: time||"", instrument: instrument||"NQ", session: session||"NY AM",
+            direction: direction||"Long", contracts: parseInt(contracts)||1, entry: parseFloat(entry)||null,
+            stop: parseFloat(stop)||null, target: parseFloat(target)||null, exit_price: parseFloat(exit_price)||null,
+            pnl: parseFloat(pnl)||0, rr: rr||"", grade: grade||"B",
+            ict_concepts: ictStr ? ictStr.split(";").filter(Boolean) : [],
+            emotions: emotStr ? emotStr.split(";").filter(Boolean) : ["Calm"],
+            mistakes: mistStr ? mistStr.split(";").filter(Boolean) : [],
+            entry_model: entryModel||"", htf_bias: htfBias||"", chart_url: chartUrl||"",
+            notes: (notes||"").replace(/^"|"$/g,"").replace(/""/g,'"'),
+            rules_followed: [], confluence_score: 0, pre_trade_narrative: "", post_trade_review: "", partials: "",
+          };
+          const { error } = await supabase.from("trades").insert(row);
+          if (!error) count++;
+        }
+        setSaveMsg(`Imported ${count} trades. Refresh to see them.`);
       }
-      setSaveMsg(`Imported ${count} trades. Refresh to see them.`);
-    } catch (e) { setSaveMsg("Import failed."); }
+
+    } catch (e) {
+      console.error("CSV import error:", e);
+      setSaveMsg("Import failed: " + (e.message || "invalid CSV."));
+    }
     setImporting(false);
-    setTimeout(() => setSaveMsg(""), 3000);
+    setTimeout(() => setSaveMsg(""), 4000);
   };
 
   const tabs = [
@@ -626,13 +732,11 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
       <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto" }}>
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 22px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16 }}>Settings</span>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>×</button>
         </div>
 
-        {/* Tabs */}
         <div style={{ display: "flex", gap: 2, padding: "10px 22px", borderBottom: "1px solid rgba(255,255,255,0.06)", justifyContent: "center" }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif", background: tab === t.id ? "rgba(56,189,248,0.15)" : "transparent", color: tab === t.id ? "#38bdf8" : "rgba(255,255,255,0.4)" }}>{t.label}</button>
@@ -640,10 +744,8 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
         </div>
 
         <div style={{ padding: "22px" }}>
-          {/* ── PROFILE TAB ── */}
           {tab === "profile" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* Avatar preview - centered, clickable for upload */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => uploadAvatar(e.target.files?.[0])} />
                 <div onClick={() => fileRef.current?.click()} style={{ width: 96, height: 96, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 800, color: "#fff", flexShrink: 0, cursor: "pointer", position: "relative" }} title="Click to upload photo"
@@ -669,25 +771,23 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
             </div>
           )}
 
-          {/* ── DATA TAB ── */}
           {tab === "data" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {saveMsg && <div style={{ fontSize: 12, color: saveMsg.includes("fail") || saveMsg.includes("Error") ? "#f87171" : "#4ade80", background: saveMsg.includes("fail") || saveMsg.includes("Error") ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)", padding: "8px 12px", borderRadius: 6 }}>{saveMsg}</div>}
 
-              {/* Import */}
               <div style={{ ...sbox }}>
                 <div style={{ ...ulbl, marginBottom: 10 }}>Import</div>
-                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 12, margin: "0 0 12px" }}>Import your trades from a previously exported file. Existing trades are kept.</p>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 12, margin: "0 0 12px" }}>Import trades from journal export or prop firm CSV (Topstep, Apex, etc.)</p>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                   <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => handleImportJSON(e.target.files?.[0])} />
                   <input ref={csvRef} type="file" accept=".csv" style={{ display: "none" }} onChange={e => handleImportCSV(e.target.files?.[0])} />
                   <Btn variant="ghost" style={{ fontSize: 11, padding: "8px 14px", opacity: importing ? 0.5 : 1 }} onClick={() => fileRef.current?.click()}>📂 Import JSON</Btn>
                   <Btn variant="ghost" style={{ fontSize: 11, padding: "8px 14px", opacity: importing ? 0.5 : 1 }} onClick={() => csvRef.current?.click()}>📂 Import CSV</Btn>
                 </div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 8, textAlign: "center" }}>Auto-detects format: journal export or prop firm (Topstep/Apex)</div>
                 {importing && <div style={{ fontSize: 11, color: "#38bdf8", marginTop: 8 }}>Importing...</div>}
               </div>
 
-              {/* Export */}
               <div style={{ ...sbox }}>
                 <div style={{ ...ulbl, marginBottom: 10 }}>Export</div>
                 <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "0 0 12px" }}>Download a backup of all your journal data.</p>
@@ -700,11 +800,8 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
             </div>
           )}
 
-          {/* ── CUSTOMIZE TAB ── */}
           {tab === "customize" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-              {/* Accent Color */}
               <div style={sbox}>
                 <div style={{ ...ulbl, marginBottom: 10 }}>Accent Color</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -718,7 +815,6 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
                 </div>
               </div>
 
-              {/* Card Style */}
               <div style={sbox}>
                 <div style={{ ...ulbl, marginBottom: 10 }}>Card Style</div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -729,7 +825,6 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 6 }}>Controls background style of dashboard cards</div>
               </div>
 
-              {/* Compact Mode */}
               <div style={sbox}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
@@ -742,7 +837,6 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
                 </div>
               </div>
 
-              {/* Show Welcome */}
               <div style={sbox}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
@@ -755,7 +849,6 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
                 </div>
               </div>
 
-              {/* Default Trade Defaults */}
               <div style={sbox}>
                 <div style={{ ...ulbl, marginBottom: 10 }}>Trade Form Defaults</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -774,7 +867,6 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
                 </div>
               </div>
 
-              {/* Custom Models */}
               <div style={sbox}>
                 <div style={{ ...ulbl, marginBottom: 6 }}>Custom Entry Models ({customModels.length})</div>
                 {customModels.length > 0
@@ -782,7 +874,6 @@ function SettingsModal({ onClose, user, username, avatarUrl, trades, accounts, c
                   : <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>None yet — add them in the trade form</div>}
               </div>
 
-              {/* Custom Concepts */}
               <div style={sbox}>
                 <div style={{ ...ulbl, marginBottom: 6 }}>Custom ICT Concepts ({customConcepts.length})</div>
                 {customConcepts.length > 0
@@ -861,7 +952,6 @@ function AuthScreen() {
           options: { data: { username } }
         });
         if (error) throw error;
-        // If auto-confirmed, update profile username immediately
         if (data?.user && username) {
           await supabase.from("profiles").update({ username }).eq("id", data.user.id);
         }
@@ -880,7 +970,6 @@ function AuthScreen() {
     <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", padding: 20, zIndex: 9999, overflowY: "auto", WebkitOverflowScrolling: "touch", boxSizing: "border-box" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet" />
       <div style={{ width: "100%", maxWidth: 400, boxSizing: "border-box" }}>
-        {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif", color: "#fff", marginBottom: 16 }}>J</div>
           <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, fontWeight: 700, color: "#e2e8f0", margin: "0 0 4px" }}>ICT Journal</h1>
@@ -888,7 +977,6 @@ function AuthScreen() {
         </div>
 
         <div style={{ padding: 28, boxSizing: "border-box" }}>
-          {/* Tab toggle */}
           <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
             {["login", "signup"].map(m => (
               <button key={m} onClick={() => { setMode(m); setErr(""); }} style={{ flex: 1, padding: 10, borderRadius: 7, fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif", background: mode === m ? "rgba(255,255,255,0.07)" : "transparent", color: mode === m ? "#e2e8f0" : "rgba(255,255,255,0.3)", boxSizing: "border-box" }}>
@@ -897,7 +985,6 @@ function AuthScreen() {
             ))}
           </div>
 
-          {/* Google sign in */}
           <button onClick={handleGoogle} disabled={loading} style={{ width: "100%", padding: "11px", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e2e8f0", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 16, fontFamily: "'Space Grotesk',sans-serif", boxSizing: "border-box" }}>
             <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Continue with Google
@@ -950,11 +1037,8 @@ function PositionSizeCalcPage({ accounts }) {
       <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>Position Size Calculator</h2>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
-        {/* Input panel */}
         <div style={{ ...sbox, padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ ...ulbl, marginBottom: 2 }}>Parameters</div>
-
-          {/* Quick-fill from accounts */}
           {accounts.filter(a => a.status === "Active").length > 0 && (
             <div>
               <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 6 }}>Quick fill from account:</div>
@@ -965,7 +1049,6 @@ function PositionSizeCalcPage({ accounts }) {
               </div>
             </div>
           )}
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Input label="Account Balance ($)" type="number" value={acctBal} onChange={e => setAcctBal(e.target.value)} placeholder="50000" />
             <Input label="Risk %" type="number" step="0.25" value={riskPct} onChange={e => setRiskPct(e.target.value)} placeholder="1" />
@@ -975,8 +1058,6 @@ function PositionSizeCalcPage({ accounts }) {
             <Input label="Stop (ticks)" type="number" step="0.25" value={stopTicks} onChange={e => setStopTicks(e.target.value)} placeholder="10" />
             <Input label="Target (ticks)" type="number" step="0.25" value={targetTicks} onChange={e => setTargetTicks(e.target.value)} placeholder="20" />
           </div>
-
-          {/* Visual risk slider */}
           {balance > 0 && (
             <div style={{ marginTop: 4 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
@@ -988,16 +1069,12 @@ function PositionSizeCalcPage({ accounts }) {
           )}
         </div>
 
-        {/* Results panel */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* Main result */}
           <div style={{ ...sbox, padding: 22, textAlign: "center" }}>
             <div style={{ ...ulbl, marginBottom: 12 }}>Max Position Size</div>
             <div style={{ fontSize: 56, fontWeight: 800, fontFamily: "'DM Mono',monospace", color: posSize > 0 ? "#4ade80" : "rgba(255,255,255,0.15)", lineHeight: 1, marginBottom: 8 }}>{posSize}</div>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>contract{posSize !== 1 ? "s" : ""} of <span style={{ color: "#38bdf8", fontWeight: 700 }}>{instrument}</span></div>
           </div>
-
-          {/* Breakdown */}
           <div style={{ ...sbox, padding: 18 }}>
             <div style={{ ...ulbl, marginBottom: 10 }}>Breakdown</div>
             {[
@@ -1013,8 +1090,6 @@ function PositionSizeCalcPage({ accounts }) {
               </div>
             ))}
           </div>
-
-          {/* Scaling table */}
           {posSize > 0 && (
             <div style={{ ...sbox, padding: 18 }}>
               <div style={{ ...ulbl, marginBottom: 10 }}>Scaling Options</div>
@@ -1047,7 +1122,6 @@ function TiltAlert({ trades, onDismiss }) {
     const today = new Date().toISOString().slice(0, 10);
     const todayTrades = trades.filter(t => t.date === today).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
 
-    // Check for 3 consecutive losses today
     if (todayTrades.length >= 3) {
       let consLosses = 0;
       for (let i = todayTrades.length - 1; i >= 0; i--) {
@@ -1059,7 +1133,6 @@ function TiltAlert({ trades, onDismiss }) {
       }
     }
 
-    // Check for negative emotions in recent trades (today)
     const tiltEmotions = ["Revenge", "FOMO", "Frustrated", "Greedy", "Overconfident"];
     const recentTilt = todayTrades.filter(t => (t.emotions || []).some(e => tiltEmotions.includes(e)));
     if (recentTilt.length > 0) {
@@ -1067,7 +1140,6 @@ function TiltAlert({ trades, onDismiss }) {
       result.push({ id: "tilt_emo_" + today, type: "emotion", severity: tagged.includes("Revenge") ? "high" : "medium", title: "Tilt Detected", message: `You tagged ${tagged.join(", ")} on today's trades. This is your signal to pause. Walk away, breathe, and protect your capital.`, icon: "⚠️" });
     }
 
-    // Check for excessive trading today (6+ trades)
     if (todayTrades.length >= 6) {
       result.push({ id: "overtrade_" + today, type: "overtrading", severity: "medium", title: "Overtrading Warning", message: `You've logged ${todayTrades.length} trades today. Quality over quantity. Consider whether your edge is still present.`, icon: "📊" });
     }
@@ -1112,23 +1184,14 @@ function PreMarketChecklist({ trades, onComplete }) {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Determine current trading session based on EST/ET time
   const getCurrentSession = () => {
     const now = new Date();
-    // Get ET hours (approximate: UTC-5 EST, UTC-4 EDT)
     const utcH = now.getUTCHours();
     const utcM = now.getUTCMinutes();
-    // Rough EDT offset (Apr-Nov) vs EST (Nov-Mar)
     const mo = now.getUTCMonth();
-    const isDST = mo >= 2 && mo <= 10; // Mar-Nov approx
+    const isDST = mo >= 2 && mo <= 10;
     const etH = (utcH + (isDST ? -4 : -5) + 24) % 24;
     const mins = etH * 60 + utcM;
-    // Sessions in ET:
-    // Asia: 8PM - 1AM ET (1200 - 60 mins)
-    // London: 2AM - 5AM ET (120 - 300 mins)
-    // NY AM: 7AM - 11AM ET (420 - 660 mins)
-    // NY Lunch: 12PM - 1PM ET (720 - 780 mins)
-    // NY PM: 1:30PM - 4PM ET (810 - 960 mins)
     if (mins >= 1200 || mins < 60) return "Asia";
     if (mins >= 60 && mins < 420) return "London";
     if (mins >= 420 && mins < 720) return "NY_AM";
@@ -1138,7 +1201,6 @@ function PreMarketChecklist({ trades, onComplete }) {
   const currentSession = getCurrentSession();
   const sessionKey = `${today}_${currentSession}`;
 
-  // Check if this session was already completed
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem("preMarketSession");
@@ -1163,7 +1225,6 @@ function PreMarketChecklist({ trades, onComplete }) {
     if (onComplete) onComplete();
   };
 
-  // Don't show if already completed/dismissed for this session
   if (completedSession || dismissed) return null;
 
   return (
@@ -1187,7 +1248,6 @@ function PreMarketChecklist({ trades, onComplete }) {
               </button>
             ))}
           </div>
-          {/* Progress bar */}
           <div style={{ marginTop: 16, height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${(checkedCount / PRE_MARKET_ITEMS.length) * 100}%`, background: allChecked ? "#4ade80" : "linear-gradient(90deg,#0ea5e9,#6366f1)", borderRadius: 2, transition: "width 0.4s cubic-bezier(0.16,1,0.3,1)" }} />
           </div>
@@ -1242,15 +1302,12 @@ function TradeLogPaginated({ filtered, filter, setFilter, setView, setEI, delete
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / TRADES_PER_PAGE));
 
-  // Reset to page 1 when filters change
   useEffect(() => { setPage(1); }, [filtered.length]);
 
-  // Clamp page
   const currentPage = Math.min(page, totalPages);
   const startIdx = (currentPage - 1) * TRADES_PER_PAGE;
   const pageTrades = sorted.slice(startIdx, startIdx + TRADES_PER_PAGE);
 
-  // Generate page numbers to show
   const pageNumbers = useMemo(() => {
     const pages = [];
     if (totalPages <= 7) {
@@ -1280,7 +1337,6 @@ function TradeLogPaginated({ filtered, filter, setFilter, setView, setEI, delete
         <Select value={filter.concept} onChange={e => setFilter(f => ({ ...f, concept: e.target.value }))} options={[{ value: "", label: "Concept" }, ...[...ICT_CONCEPTS, ...customConcepts].map(c => ({ value: c, label: c }))]} style={{ padding: "5px 8px", fontSize: 11, maxWidth: 140 }} />
       </div>
 
-      {/* Trade count & page info */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
         <span>{sorted.length} trade{sorted.length !== 1 ? "s" : ""} {sorted.length > TRADES_PER_PAGE ? `· Page ${currentPage} of ${totalPages}` : ""}</span>
         {sorted.length > TRADES_PER_PAGE && <span>Showing {startIdx + 1}-{Math.min(startIdx + TRADES_PER_PAGE, sorted.length)}</span>}
@@ -1312,7 +1368,6 @@ function TradeLogPaginated({ filtered, filter, setFilter, setView, setEI, delete
         {!sorted.length && <div style={{ padding: 36, textAlign: "center", color: "rgba(255,255,255,0.15)", fontSize: 12 }}>No trades</div>}
       </div>
 
-      {/* Pagination controls */}
       {totalPages > 1 && (
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 4, paddingTop: 8, animation: "smoothFadeUp 0.3s ease" }}>
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,0.08)", background: "transparent", color: currentPage === 1 ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.5)", cursor: currentPage === 1 ? "default" : "pointer" }}>‹ Prev</button>
@@ -1347,7 +1402,6 @@ export default function TradingJournal() {
   const [dbLoading, setDL] = useState(false);
   const { isMobile, isTablet } = useIsMobile();
 
-  // New state
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -1360,14 +1414,32 @@ export default function TradingJournal() {
   const scrollTimeout = useRef(null);
   const handleScroll = () => { setIsScrolling(true); if (scrollTimeout.current) clearTimeout(scrollTimeout.current); scrollTimeout.current = setTimeout(() => setIsScrolling(false), 800); };
 
-  // Auth
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FIX 1: Track user ID with ref to prevent tab-switch reload
+  // ═══════════════════════════════════════════════════════════════════════════
+  const userIdRef = useRef(null);
+
+  // Auth - only update state when user ID actually changes
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { setUser(session?.user || null); setAL(false); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => setUser(session?.user || null));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const u = session?.user || null;
+      userIdRef.current = u?.id || null;
+      setUser(u);
+      setAL(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const newId = session?.user?.id || null;
+      // Only update state if user actually changed (login/logout)
+      // Skip TOKEN_REFRESHED events that fire on tab focus
+      if (newId !== userIdRef.current) {
+        userIdRef.current = newId;
+        setUser(session?.user || null);
+      }
+    });
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load data
+  // Load data - use user?.id as dependency to prevent reload on token refresh
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -1380,7 +1452,6 @@ export default function TradingJournal() {
       const loadedTrades = (tD || []).map(dbToTrade);
       const rawAccounts = (aD || []).map(dbToAccount);
 
-      // Rebuild balance histories from actual trades (fixes sparkline accuracy)
       const rebuiltAccounts = rawAccounts.map(acc => {
         const { balanceHistory, currentBalance } = buildBalanceHistory(acc, loadedTrades);
         return { ...acc, balanceHistory, currentBalance };
@@ -1395,20 +1466,17 @@ export default function TradingJournal() {
       setUsername(un);
       setAvatarUrl(av);
       if (pD?.customization) setCustomization(prev => ({ ...prev, ...pD.customization }));
-      // Prompt for username if signed in with Google or missing
       if (!un) setNeedsUsername(true);
       setDL(false);
     })();
-  }, [user]);
+  }, [user?.id]); // KEY FIX: user?.id instead of user
 
-  // Close user menu on outside click
   useEffect(() => {
     const handler = (e) => { if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setShowUserMenu(false); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Helper: rebuild and sync account balance history after any trade change
   const syncAccountHistory = useCallback(async (accountId, updatedTrades, currentAccounts) => {
     const acc = currentAccounts.find(a => a.id === accountId);
     if (!acc) return currentAccounts;
@@ -1417,7 +1485,6 @@ export default function TradingJournal() {
     return currentAccounts.map(a => a.id === accountId ? { ...a, balanceHistory, currentBalance } : a);
   }, []);
 
-  // Trade CRUD
   const addTrade = async (f) => {
     const row = tradeToDb(f, user.id);
     const { data, error } = await supabase.from("trades").insert(row).select().single();
@@ -1437,7 +1504,6 @@ export default function TradingJournal() {
     await supabase.from("trades").update(row).eq("id", f.id);
     const newTrades = trades.map(t => t.id === f.id ? { ...f } : t);
     setTrades(newTrades);
-    // Sync all affected accounts (old and new)
     const old = trades.find(t => t.id === f.id);
     const affectedIds = [...new Set([old?.accountId, f.accountId].filter(Boolean))];
     let acc = accounts;
@@ -1456,7 +1522,6 @@ export default function TradingJournal() {
     }
   };
 
-  // Account CRUD
   const addAccount = async (f) => {
     const row = accountToDb({ ...f, balanceHistory: [f.currentBalance] }, user.id);
     const { data, error } = await supabase.from("accounts").insert(row).select().single();
@@ -1487,7 +1552,6 @@ export default function TradingJournal() {
     setNeedsUsername(false);
   };
 
-  // Filtered trades
   const filtered = trades.filter(t => {
     if (filter.instrument && t.instrument !== filter.instrument) return false;
     if (filter.session && t.session !== filter.session) return false;
@@ -1497,7 +1561,6 @@ export default function TradingJournal() {
     return true;
   });
 
-  // Stats
   const totalPnl = filtered.reduce((s, t) => s + t.pnl, 0);
   const wins = filtered.filter(t => t.pnl > 0), losses = filtered.filter(t => t.pnl < 0);
   const winRate = filtered.length ? (wins.length / filtered.length * 100).toFixed(1) : "0";
@@ -1518,7 +1581,6 @@ export default function TradingJournal() {
   const navItems = [{ key: "dashboard", label: "Dashboard" }, { key: "trades", label: "Trades" }, { key: "accounts", label: "Accounts" }, { key: "montecarlo", label: "Monte Carlo" }, { key: "sizecalc", label: "Size Calc" }, { key: "gallery", label: "Gallery" }];
   const isAct = k => view === k || (k === "trades" && (view === "addTrade" || view === "editTrade")) || (k === "accounts" && (view === "addAccount" || view === "editAccount"));
 
-  // Avatar component
   const displayName = username || user?.email?.split("@")[0] || "?";
   const AvatarCircle = ({ size = 32 }) => (
     <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, fontWeight: 800, color: "#fff", cursor: "pointer", flexShrink: 0 }}>
@@ -1538,18 +1600,15 @@ export default function TradingJournal() {
         input,select,textarea,button{font-family:inherit}
         @media(max-width:640px){.hide-mobile{display:none!important}}
         
-        /* --- SLEEK MINIMAL ANIMATIONS --- */
         @keyframes smoothFadeUp {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
         }
         
-        /* Animate views smoothly on load/tab switch */
         .animated-view {
           animation: smoothFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        /* Tactile buttons & pills */
         button {
           transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease, opacity 0.2s ease !important;
         }
@@ -1562,7 +1621,6 @@ export default function TradingJournal() {
           filter: brightness(0.9);
         }
 
-        /* Popping inputs */
         input, select, textarea {
           transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
         }
@@ -1578,7 +1636,6 @@ export default function TradingJournal() {
         .app-card{background:var(--card-bg)!important;border:var(--card-border)!important}
         ${customization.compactMode ? ".compact-pad{padding:10px 12px!important}.compact-gap{gap:8px!important}" : ""}
         
-        /* Floating Scrollbar (Smooth fade & Hover effects) */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background-color: transparent; }
         ::-webkit-scrollbar-thumb { 
@@ -1586,21 +1643,10 @@ export default function TradingJournal() {
           border-radius: 10px; 
           transition: background-color 0.4s ease-in-out; 
         }
+        .is-scrolling *::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.15); }
+        .is-scrolling *::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,0.35); }
         
-        /* Shows up dimly when scrolling */
-        .is-scrolling *::-webkit-scrollbar-thumb { 
-          background-color: rgba(255,255,255,0.15); 
-        }
-        
-        /* Gets brighter/lighter when you hover directly over the scrollbar */
-        .is-scrolling *::-webkit-scrollbar-thumb:hover { 
-          background-color: rgba(255,255,255,0.35); 
-        }
-        
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        
+        @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pageFadeIn {
           from { opacity: 0; transform: translateY(6px); }
           to { opacity: 1; transform: translateY(0); }
@@ -1608,10 +1654,8 @@ export default function TradingJournal() {
         .page-fade-in { animation: pageFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
 
-      {/* Username setup modal */}
       {needsUsername && <UsernameSetupModal onSave={handleSetUsername} />}
 
-      {/* Settings modal */}
       {showSettings && (
         <SettingsModal
           onClose={() => setShowSettings(false)}
@@ -1628,12 +1672,9 @@ export default function TradingJournal() {
         />
       )}
 
-      {/* Pre-Market Routine Checklist */}
       {showPreMarket && <PreMarketChecklist trades={trades} onComplete={() => setShowPreMarket(false)} />}
 
-      {/* ── HEADER ── */}
       <div style={{ padding: isMobile ? "12px 16px" : "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.015)", flexWrap: "wrap", gap: 8 }}>
-        {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#0ea5e9,#6366f1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -1644,7 +1685,6 @@ export default function TradingJournal() {
           </div>
         </div>
 
-        {/* Desktop nav */}
         {isMobile ? (
           <button onClick={() => setMM(!mobileMenu)} style={{ background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 6, color: "#e2e8f0", padding: "6px 10px", cursor: "pointer", fontSize: 16 }}>☰</button>
         ) : (
@@ -1653,9 +1693,7 @@ export default function TradingJournal() {
               <button key={n.key} onClick={() => { setView(n.key); setSD(null); }} style={{ padding: "7px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif", background: isAct(n.key) ? "rgba(255,255,255,0.07)" : "transparent", color: isAct(n.key) ? "#e2e8f0" : "rgba(255,255,255,0.3)" }}>{n.label}</button>
             ))}
             <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.06)", margin: "0 6px" }} />
-            {/* Settings button */}
             <button onClick={() => setShowSettings(true)} title="Settings" style={{ background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, color: "rgba(255,255,255,0.45)", padding: "6px 10px", cursor: "pointer", fontSize: 15, lineHeight: 1 }}>⚙</button>
-            {/* Avatar + dropdown */}
             <div ref={userMenuRef} style={{ position: "relative", marginLeft: 4 }}>
               <div onClick={() => setShowUserMenu(p => !p)}>
                 <AvatarCircle size={34} />
@@ -1675,7 +1713,6 @@ export default function TradingJournal() {
         )}
       </div>
 
-      {/* Mobile menu */}
       {isMobile && mobileMenu && (
         <div className="animated-view" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "12px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
           {navItems.map(n => <button key={n.key} onClick={() => { setView(n.key); setSD(null); setMM(false); }} style={{ padding: "10px 8px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif", textAlign: "center", background: isAct(n.key) ? "rgba(255,255,255,0.07)" : "transparent", color: isAct(n.key) ? "#e2e8f0" : "rgba(255,255,255,0.3)" }}>{n.label}</button>)}
@@ -1684,13 +1721,11 @@ export default function TradingJournal() {
         </div>
       )}
 
-      {/* ── MAIN CONTENT ── */}
       {dbLoading ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.2)" }}>Loading data...</div>
       ) : (
         <div key={view} className="animated-view" style={{ padding: isMobile ? "16px" : "20px 24px", flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
 
-          {/* DASHBOARD */}
           {view === "dashboard" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div style={{ position: "relative", display: "flex", justifyContent: "center", alignItems: "center", width: "100%" }}>
@@ -1737,7 +1772,6 @@ export default function TradingJournal() {
                 <StatCard label="Streak" value={streak > 0 ? `${streak}W` : streak < 0 ? `${Math.abs(streak)}L` : "--"} accent={streak > 0 ? "#4ade80" : streak < 0 ? "#f87171" : "#e2e8f0"} sub={`${trades.length} total`} />
               </div>
 
-              {/* Tilt Alerts */}
               <TiltAlert trades={trades} />
 
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
@@ -1762,7 +1796,6 @@ export default function TradingJournal() {
                 <TradeDurationWidget trades={filtered} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginTop: 14 }}>
-                {/* Active Accounts - first */}
                 {accounts.filter(a => a.status === "Active").length > 0 ? (
                 <div style={sbox}>
                   <div style={{ ...ulbl, marginBottom: 10 }}>Active Accounts</div>
@@ -1786,18 +1819,15 @@ export default function TradingJournal() {
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>No active accounts</div>
                 </div>
                 )}
-                {/* Trailing Drawdown Buffer - second */}
                 <DrawdownBufferWidget accounts={accounts} />
               </div>
             </div>
           )}
 
-          {/* TRADES */}
           {view === "trades" && (
             <TradeLogPaginated filtered={filtered} filter={filter} setFilter={setFilter} setView={setView} setEI={setEI} deleteTrade={deleteTrade} customConcepts={customConcepts} tCols={tCols} />
           )}
 
-          {/* ADD / EDIT TRADE */}
           {(view === "addTrade" || view === "editTrade") && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>{view === "addTrade" ? "Log Trade" : "Edit Trade"}</h2>
@@ -1810,7 +1840,6 @@ export default function TradingJournal() {
             </div>
           )}
 
-          {/* ACCOUNTS */}
           {view === "accounts" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1848,7 +1877,6 @@ export default function TradingJournal() {
             </div>
           )}
 
-          {/* ADD / EDIT ACCOUNT */}
           {(view === "addAccount" || view === "editAccount") && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, margin: 0 }}>{view === "addAccount" ? "Add Account" : "Edit Account"}</h2>
@@ -1860,13 +1888,9 @@ export default function TradingJournal() {
             </div>
           )}
 
-          {/* MONTE CARLO */}
           {view === "montecarlo" && <MonteCarloSim trades={trades} />}
-
-          {/* SIZE CALCULATOR */}
           {view === "sizecalc" && <PositionSizeCalcPage accounts={accounts} />}
 
-          {/* GALLERY */}
           {view === "gallery" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
