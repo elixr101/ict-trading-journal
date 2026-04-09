@@ -574,8 +574,10 @@ function TradeForm({trade,accounts,customModels,customConcepts,onSave,onCancel,o
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr 1fr 1fr",gap:10}}>
-        <TrackedInput label="Date" type="date" value={form.date} onChange={e=>set("date",e.target.value)}/>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr 1fr",gap:10}}>
+        <div style={{gridColumn:isMobile?"span 2":"auto"}}>
+          <TrackedInput label="Date" type="date" value={form.date} onChange={e=>set("date",e.target.value)}/>
+        </div>
         <TrackedInput label="Entry Time" type="time" value={form.time} onChange={e=>set("time",e.target.value)}/>
         <TrackedInput label="Exit Time" type="time" value={form.exitTime} onChange={e=>set("exitTime",e.target.value)}/>
         <TrackedSelect label="Instrument" value={form.instrument} onChange={e=>set("instrument",e.target.value)} options={INSTRUMENTS}/>
